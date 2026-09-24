@@ -8,8 +8,8 @@
 # handshake and picks the right server exactly as it does for outside players.
 set -eu
 
-DOMAIN="${RAMCRAFT_ROUTER_DOMAIN:-mc.ramflix.xyz}"
-TARGET="${RAMCRAFT_LAN_HOST:-192.168.1.63}"
+DOMAIN="${RAMCRAFT_ROUTER_DOMAIN:-mc.example.com}"
+TARGET="${RAMCRAFT_LAN_HOST:-192.168.1.10}"
 UPSTREAM1="${RAMCRAFT_DNS_UPSTREAM1:-1.1.1.1}"
 UPSTREAM2="${RAMCRAFT_DNS_UPSTREAM2:-8.8.8.8}"
 

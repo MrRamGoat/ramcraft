@@ -14,3 +14,9 @@ __pycache__/
 .venv/
 venv/
 .DS_Store
+
+# Real deployment values (addresses, domain, docker gid)
+.env
+
+# Local dev proxy helper, machine-specific
+preview.cjs

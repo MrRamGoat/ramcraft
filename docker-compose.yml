@@ -1,8 +1,10 @@
+# Deployment values live in .env (copy .env.example). The defaults below are
+# generic on purpose so the repo carries nobody's addresses.
 services:
   # Minecraft puts the hostname the player dialled inside its handshake, so one
-  # listener on 25565 can fan out to every server by name. That is what makes
-  # "<server>.mc.ramflix.xyz" work with no port, no SRV record and no per-server
-  # DNS - a single wildcard record and a single forwarded port cover all of them.
+  # listener on 25565 can fan out to every world by name. That is what makes
+  # "<world>.<domain>" work with no port, no SRV record and no per-world DNS -
+  # a single wildcard record and a single forwarded port cover all of them.
   mc-router:
     image: itzg/mc-router:latest
     container_name: mc-router
@@ -16,16 +18,15 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     # The image runs as uid 65532, which cannot read the 0660 root:docker
     # socket. Joining the docker group beats running the router as root.
-    # 991 is the docker gid inside LXC 105 - check with:
-    #   stat -c '%g' /var/run/docker.sock
+    # Find yours with:  stat -c '%g' /var/run/docker.sock
     group_add:
-      - "991"
+      - "${DOCKER_GID:-988}"
     environment:
       IN_DOCKER: "true"
       API_BINDING: ":8080"
       CONNECTION_RATE_LIMIT: "20"
       DEBUG: "false"
-      # A stopped server has no route, so joining it just fails - which from
+      # A stopped world has no route, so joining it just fails - which from
       # outside is indistinguishable from the whole setup being broken. This
       # starts it on demand instead, so the link always works.
       AUTO_SCALE_UP: "true"
@@ -34,9 +35,9 @@ services:
     networks:
       - ramcraft
 
-  # Split DNS so the public hostname also works from inside the house, where
-  # the router has no NAT loopback. Point a device's DNS at 192.168.1.63 and
-  # <server>.mc.ramflix.xyz resolves to the box directly instead of the WAN IP.
+  # Split DNS, for routers with no NAT loopback: point a device's DNS here and
+  # <world>.<domain> resolves to this machine instead of the WAN IP, so the
+  # same address works indoors and out. Unnecessary if your router hairpins.
   ramcraft-dns:
     build: ./dns
     image: ramcraft-dns:latest
@@ -46,8 +47,8 @@ services:
       - "53:53/udp"
       - "53:53/tcp"
     environment:
-      RAMCRAFT_ROUTER_DOMAIN: mc.ramflix.xyz
-      RAMCRAFT_LAN_HOST: 192.168.1.63
+      RAMCRAFT_ROUTER_DOMAIN: ${RAMCRAFT_ROUTER_DOMAIN:-mc.example.com}
+      RAMCRAFT_LAN_HOST: ${RAMCRAFT_LAN_HOST:-192.168.1.10}
     networks:
       - ramcraft
 
@@ -66,15 +67,15 @@ services:
     environment:
       RAMCRAFT_DATA: /srv/mc
       RAMCRAFT_NETWORK: ramcraft
-      RAMCRAFT_LAN_HOST: 192.168.1.63
-      # Every server is published as <id>.<this> by mc-router.
-      RAMCRAFT_ROUTER_DOMAIN: mc.ramflix.xyz
+      RAMCRAFT_LAN_HOST: ${RAMCRAFT_LAN_HOST:-192.168.1.10}
+      # Every world is published as <id>.<this> by mc-router.
+      RAMCRAFT_ROUTER_DOMAIN: ${RAMCRAFT_ROUTER_DOMAIN:-mc.example.com}
       RAMCRAFT_ROUTER_API: http://mc-router:8080
       # 25565 belongs to mc-router, so direct LAN ports start above it.
-      RAMCRAFT_PORT_BASE: "25566"
-      RAMCRAFT_PORT_MAX: "25640"
-      RAMCRAFT_MEM_BUDGET_GB: "24"
-      TZ: Asia/Jerusalem
+      RAMCRAFT_PORT_BASE: ${RAMCRAFT_PORT_BASE:-25566}
+      RAMCRAFT_PORT_MAX: ${RAMCRAFT_PORT_MAX:-25640}
+      RAMCRAFT_MEM_BUDGET_GB: ${RAMCRAFT_MEM_BUDGET_GB:-16}
+      TZ: ${TZ:-Etc/UTC}
     networks:
       - ramcraft
     depends_on:

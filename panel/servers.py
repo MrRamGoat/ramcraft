@@ -21,7 +21,7 @@ NETWORK = os.environ.get("RAMCRAFT_NETWORK", "ramcraft")
 # 25565 is mc-router's; the per-server LAN ports start above it.
 PORT_BASE = int(os.environ.get("RAMCRAFT_PORT_BASE", "25566"))
 PORT_MAX = int(os.environ.get("RAMCRAFT_PORT_MAX", "25640"))
-LAN_HOST = os.environ.get("RAMCRAFT_LAN_HOST", "192.168.1.63")
+LAN_HOST = os.environ.get("RAMCRAFT_LAN_HOST", "127.0.0.1")
 ROUTER_DOMAIN = os.environ.get("RAMCRAFT_ROUTER_DOMAIN", "")
 ROUTER_API = os.environ.get("RAMCRAFT_ROUTER_API", "http://mc-router:8080")
 
@@ -251,7 +251,7 @@ def build_env(spec: dict, rcon_password: str) -> dict:
     kind = spec["kind"]
     env = {
         "EULA": "TRUE",
-        "TZ": spec.get("tz", "Asia/Jerusalem"),
+        "TZ": spec.get("tz", os.environ.get("TZ", "Etc/UTC")),
         "MEMORY": f"{spec['memory_gb']}G",
         "USE_AIKAR_FLAGS": "true",
         "ENABLE_RCON": "true",
