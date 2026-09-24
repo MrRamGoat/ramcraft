@@ -13,19 +13,6 @@ RamCraft downloads it, picks the right Java, boots it, and hands you an address.
 
 ---
 
-## ⚠️ There is no login
-
-RamCraft has **no authentication of any kind**. Anyone who can reach the panel can create,
-stop and permanently delete worlds — including their backups.
-
-Run it on your LAN, or behind a VPN, or behind something that does auth (Authelia, Cloudflare
-Access, a reverse proxy with basic auth). **Do not put the panel on the public internet.**
-
-Forwarding port 25565 for the game itself is fine and expected — that's just Minecraft. It's
-the panel on 8110 that must stay private.
-
----
-
 ## What it does
 
 - **Modpacks** — search ~18,000 packs on Modrinth or FTB's curated catalogue, click, done.
