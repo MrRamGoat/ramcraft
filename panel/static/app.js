@@ -264,6 +264,9 @@ function addCardElement() {
 
 function renderServers() {
   const grid = $('#grid');
+  // With nothing to list, centre the quick-start block in the space between
+  // the two bars instead of leaving it stranded at the top.
+  grid.classList.toggle('is-empty', !state.servers.length);
 
   if (!state.servers.length) {
     if (!$('.empty-state', grid)) {
