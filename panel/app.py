@@ -122,6 +122,55 @@ async def modrinth_versions(slug: str):
     return {"versions": out}
 
 
+FTB_API = "https://api.feed-the-beast.com/v1/modpacks/public/modpack"
+_ftb_cache = {"at": 0.0, "packs": []}
+
+
+@app.get("/api/search/ftb")
+async def search_ftb(q: str = ""):
+    """FTB's own curated packs - Direwolf20, Skies, Oceanblock and the rest.
+
+    A separate source because these are not on Modrinth and their API needs no
+    key, unlike CurseForge. Only ~100 packs exist, so the whole list is cached
+    and filtered here rather than paged.
+    """
+    if not _ftb_cache["packs"] or time.time() - _ftb_cache["at"] > 3600:
+        async with httpx.AsyncClient(timeout=25, headers=UA) as c:
+            r = await c.get(f"{FTB_API}/all")
+            r.raise_for_status()
+            ids = (r.json().get("packs") or [])[:120]
+            details = await asyncio.gather(
+                *(c.get(f"{FTB_API}/{i}") for i in ids), return_exceptions=True
+            )
+        packs = []
+        for d in details:
+            if isinstance(d, Exception) or d.status_code != 200:
+                continue
+            p = d.json()
+            # FTB returns lowercase "release"; matching "Release" silently
+            # filtered out every pack.
+            versions = [v for v in (p.get("versions") or [])
+                        if str(v.get("type", "")).lower() == "release"]
+            if not versions:
+                continue
+            art = next((a["url"] for a in (p.get("art") or []) if a.get("type") == "square"), None)
+            packs.append({
+                "id": p.get("id"),
+                "title": p.get("name"),
+                "description": (p.get("synopsis") or "")[:180],
+                "icon": art,
+                "downloads": p.get("installs", 0),
+                "versions": [{"id": v["id"], "name": v["name"]} for v in versions[-8:]][::-1],
+            })
+        _ftb_cache["packs"] = sorted(packs, key=lambda x: -x["downloads"])
+        _ftb_cache["at"] = time.time()
+
+    ql = q.lower().strip()
+    hits = [p for p in _ftb_cache["packs"]
+            if not ql or ql in p["title"].lower() or ql in p["description"].lower()]
+    return {"hits": hits, "total": len(hits)}
+
+
 @app.get("/api/search/mods")
 async def search_mods(q: str = "", limit: int = 24, offset: int = 0,
                       version: str = "", loader: str = ""):
@@ -541,22 +590,63 @@ async def players(sid: str):
 
 # --- backups ---------------------------------------------------------------
 
+async def _modrinth_pack_file(slug: str, version_id: str | None) -> str | None:
+    """URL of the .mrpack the author published for this pack version."""
+    async with httpx.AsyncClient(timeout=25, headers=UA) as c:
+        if version_id:
+            r = await c.get(f"{MODRINTH_API}/version/{version_id}")
+            versions = [r.json()] if r.status_code == 200 else []
+        else:
+            r = await c.get(f"{MODRINTH_API}/project/{slug}/version")
+            versions = r.json() if r.status_code == 200 else []
+    for v in versions:
+        for f in v.get("files", []):
+            if f.get("filename", "").endswith(".mrpack") or f.get("primary"):
+                return f["url"]
+    return None
+
+
 @app.get("/api/servers/{sid}/mrpack")
 async def client_pack(sid: str):
-    """A .mrpack of this server's mods, so a player's client matches it.
-    Opens directly in the Modrinth app, PrismLauncher, ATLauncher, MultiMC."""
+    """A .mrpack for this server, so a player installs the right mods AND
+    finds the server already in their Multiplayer list. Opens directly in the
+    Modrinth app, PrismLauncher, ATLauncher or MultiMC."""
     meta = S.load_meta(sid)
     if not meta:
         raise HTTPException(404, "unknown server")
     spec = meta.get("spec") or {}
+    # Put the address inside the pack so there is nothing left to type.
+    address = S.connect_info(meta).get("public") or S.connect_info(meta)["lan"]
+
+    if meta.get("kind") == "modrinth" and spec.get("modpack"):
+        # Ship the author's own pack file - it carries their overrides, configs
+        # and exact versions. Rebuilding it from a mod list would lose all that.
+        url = await _modrinth_pack_file(spec["modpack"], spec.get("modpack_version"))
+        if not url:
+            raise HTTPException(404, "could not find a published .mrpack for that modpack")
+        try:
+            data, report = await mrpack.from_published_pack(url, meta["name"], address)
+        except Exception as e:
+            raise HTTPException(502, "could not fetch the pack: " + str(e))
+        return _pack_response(sid, data, report)
+
     mods = spec.get("mods") or []
     if not mods:
-        raise HTTPException(400, "this server was not built from a hand-picked mod list")
+        raise HTTPException(
+            400,
+            "No client pack for this server type. Modrinth modpacks and "
+            "hand-picked mod lists can produce one; CurseForge server packs and "
+            "plain servers cannot.",
+        )
 
     data, report = await mrpack.build(
         meta["name"], meta.get("mc_version") or spec.get("mc_version") or "",
-        spec.get("loader", "fabric"), mods,
+        spec.get("loader", "fabric"), mods, address,
     )
+    return _pack_response(sid, data, report)
+
+
+def _pack_response(sid: str, data: bytes, report: dict) -> Response:
     return Response(
         content=data,
         media_type="application/x-modrinth-modpack+zip",

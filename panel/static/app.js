@@ -14,6 +14,8 @@ const state = {
   stream: null,
   busy: new Set(),
   mcVersions: [],
+  worldFilter: 'all',
+  worldQuery: '',
 };
 
 /* ---------- helpers ---------- */
@@ -105,18 +107,21 @@ function renderHost() {
     ? Math.round(((h.disk_total_gb - h.disk_free_gb) / h.disk_total_gb) * 100) : 0;
   $('#hostStats').innerHTML = `
     <div class="hstat">
-      <span class="k"><svg class="ico"><use href="#i-server"/></svg>Worlds</span>
-      <span class="v">${h.running} <i>live of</i> ${h.servers}</span>
+      <span class="stat-icon"><svg class="ico"><use href="#i-server"/></svg></span>
+      <div><span class="k">Worlds online</span>
+      <span class="v">${h.running} <i>/ ${h.servers} worlds</i></span></div>
     </div>
     <div class="hstat" title="RAM handed to running servers, against this machine's budget">
-      <span class="k"><svg class="ico"><use href="#i-chip"/></svg>Memory</span>
+      <span class="stat-icon"><svg class="ico"><use href="#i-chip"/></svg></span>
+      <div><span class="k">Memory allocated</span>
       <span class="v">${(h.mem_used_mb / 1024).toFixed(0)} <i>of</i> ${(h.mem_total_mb / 1024).toFixed(0)} GB</span>
-      <span class="bar"><span class="${meterClass(memPct)}" style="width:${memPct}%"></span></span>
+      <span class="bar"><span class="${meterClass(memPct)}" style="width:${Math.min(memPct,100)}%"></span></span></div>
     </div>
     <div class="hstat">
-      <span class="k"><svg class="ico"><use href="#i-disk"/></svg>Storage</span>
+      <span class="stat-icon"><svg class="ico"><use href="#i-disk"/></svg></span>
+      <div><span class="k">Storage available</span>
       <span class="v">${h.disk_free_gb} GB <i>free</i></span>
-      <span class="bar"><span class="${meterClass(diskUsedPct)}" style="width:${diskUsedPct}%"></span></span>
+      <span class="bar"><span class="${meterClass(diskUsedPct)}" style="width:${Math.min(diskUsedPct,100)}%"></span></span></div>
     </div>`;
 }
 
@@ -125,6 +130,7 @@ function renderHost() {
 // a click landing in that window hit a detached node and did nothing - which is
 // what "it gets stuck when I click Manage" actually was.
 const CARD_TEMPLATE = `
+  <div class="world-art" aria-hidden="true"><span class="world-art-label">Your next chapter</span><svg class="world-cube" viewBox="0 0 24 24"><use href="#i-box"/></svg></div>
   <div class="card-head">
     <span data-f="iconSlot"></span>
     <div class="card-title">
@@ -251,12 +257,13 @@ function patchCard(el, s) {
 function addCardElement() {
   let el = $('#addCard');
   if (!el) {
-    el = document.createElement('div');
+    el = document.createElement('button');
+    el.type = 'button';
     el.className = 'card add';
     el.id = 'addCard';
     el.innerHTML = `<span class="plus"><svg class="ico"><use href="#i-plus"/></svg></span>
-      <strong>New world</strong>
-      <span style="font-size:12.5px">Modpack, adventure map or vanilla</span>`;
+      <strong>Room for one more adventure.</strong>
+      <span>Vanilla, modpacks, or something<br>entirely your own.</span><span class="add-world-label">Create a world <span aria-hidden="true">↗</span></span>`;
     el.onclick = openCreate;
   }
   return el;
@@ -264,6 +271,11 @@ function addCardElement() {
 
 function renderServers() {
   const grid = $('#grid');
+  $('#navWorldCount').textContent = state.servers.length;
+  $('#worldCount').textContent = state.servers.length;
+  const online = state.servers.filter(s => s.status.state === 'online').length;
+  $('#worldSummary').textContent = `${online} live · ${state.servers.length} total`;
+  $('#noMatches').hidden = true;
   // With nothing to list, centre the quick-start block in the space between
   // the two bars instead of leaving it stranded at the top.
   grid.classList.toggle('is-empty', !state.servers.length);
@@ -329,16 +341,45 @@ function renderServers() {
     if (!seen.has(el.dataset.id)) el.remove();
   });
   grid.appendChild(addCardElement());   // keep it last
+  applyWorldFilters();
 }
+
+function applyWorldFilters() {
+  let visible = 0;
+  for (const s of state.servers) {
+    const el = $('#grid').querySelector(`.card[data-id="${CSS.escape(s.id)}"]`);
+    if (!el) continue;
+    const matches = (state.worldFilter === 'all' || s.status.state === state.worldFilter)
+      && `${s.name} ${KIND_LABEL[s.kind] || s.kind} ${s.connect.public || s.connect.lan}`.toLowerCase().includes(state.worldQuery);
+    el.hidden = !matches;
+    if (matches) visible++;
+  }
+  const filtering = state.worldFilter !== 'all' || !!state.worldQuery;
+  if ($('#addCard')) $('#addCard').hidden = filtering;
+  $('#noMatches').hidden = !state.servers.length || visible > 0 || !filtering;
+}
+$('#worldSearch').addEventListener('input', e => {state.worldQuery = e.target.value.trim().toLowerCase();applyWorldFilters();});
+$$('[data-filter]').forEach(btn => btn.addEventListener('click', () => {
+  state.worldFilter = btn.dataset.filter;
+  $$('[data-filter]').forEach(b => {b.classList.toggle('active', b === btn);b.setAttribute('aria-pressed', String(b === btn));});
+  applyWorldFilters();
+}));
+$('#clearFilters').onclick = () => {$('#worldSearch').value = '';state.worldQuery = ''; $('[data-filter="all"]').click();};
+$('#retryDashboard').onclick = () => refresh();
 
 /* ---------- polling ---------- */
 
 async function refresh(withPlayers = true) {
+  if (state.refreshing) return;
+  state.refreshing = true;
   try {
     // One request, not two: each round trip through the tunnel costs 150-300ms.
-    const d = await api('/dashboard');
+    const d = await api('/dashboard', {signal: AbortSignal.timeout(20000)});
     state.servers = d.servers;
     state.host = d.host;
+    $('#dashboardError').hidden = true;
+    $('#connectionStatus').classList.remove('disconnected');
+    $('#connectionStatus').lastElementChild.textContent = 'Connected to host';
     renderHost();
     renderServers();
     if (withPlayers) {
@@ -351,7 +392,14 @@ async function refresh(withPlayers = true) {
       }
     }
   } catch (e) {
+    $('#dashboardError').hidden = false;
+    $('#connectionStatus').classList.add('disconnected');
+    $('#connectionStatus').lastElementChild.textContent = 'Host unavailable';
+    const loading = $('.loading-state');
+    if (loading) loading.textContent = 'Your worlds will appear when the connection is restored.';
     console.error(e);
+  } finally {
+    state.refreshing = false;
   }
 }
 
@@ -406,9 +454,24 @@ async function deleteServer(id) {
 
 /* ---------- modal plumbing ---------- */
 
-function openModal(sel) { $(sel).hidden = false; }
+function openModal(sel) {
+  const modal = $(sel);
+  modal._returnFocus = document.activeElement;
+  modal.hidden = false;
+  document.body.classList.add('modal-open');
+  $('.sidebar').inert = true;
+  $('.workspace-main').inert = true;
+  modal.querySelector('button, input, select, [tabindex]')?.focus();
+}
 function closeModal(sel) {
-  $(sel).hidden = true;
+  const modal = $(sel);
+  modal.hidden = true;
+  if (!$('.modal-backdrop:not([hidden])')) {
+    document.body.classList.remove('modal-open');
+    $('.sidebar').inert = false;
+    $('.workspace-main').inert = false;
+  }
+  modal._returnFocus?.focus();
   if (sel === '#detailModal') { state.stream?.close(); state.stream = null; state.detailId = null; }
 }
 $$('.modal-backdrop').forEach(bd => {
@@ -418,6 +481,14 @@ $$('.modal-backdrop').forEach(bd => {
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') $$('.modal-backdrop:not([hidden])').forEach(bd => closeModal('#' + bd.id));
+  if (e.key === 'Tab') {
+    const modal = $('.modal-backdrop:not([hidden])');
+    if (!modal) return;
+    const items = $$('button, a[href], input, select, textarea, summary, [tabindex="0"]', modal).filter(el => !el.disabled && el.getClientRects().length);
+    const first = items[0], last = items.at(-1);
+    if (e.shiftKey && document.activeElement === first) {e.preventDefault();last?.focus();}
+    else if (!e.shiftKey && document.activeElement === last) {e.preventDefault();first?.focus();}
+  }
 });
 
 function wireTabs(navSel) {
@@ -534,8 +605,33 @@ $('#mrMore').onclick = () => { state.mrOffset += 24; searchModrinth(false); };
 async function searchModrinth(reset) {
   const q = $('#mrQuery').value.trim();
   const v = $('#mrVersionFilter').value;
+  const src = $('#mrSource').value;
   const box = $('#mrResults');
-  if (reset) box.innerHTML = '<div class="list-empty"><span class="spinner"></span> Searching Modrinth…</div>';
+  // FTB's catalogue is ~100 packs served whole, so it has no paging or
+  // version facet - hide the controls that would do nothing there.
+  $('#mrVersionFilter').hidden = src === 'ftb';
+  if (reset) box.innerHTML = `<div class="list-empty"><span class="spinner"></span> Searching ${src === 'ftb' ? 'FTB' : 'Modrinth'}…</div>`;
+
+  if (src === 'ftb') {
+    try {
+      const r = await api(`/search/ftb?q=${encodeURIComponent(q)}`);
+      box.innerHTML = r.hits.map(h => `
+        <button class="pack" data-ftb="${h.id}" data-title="${esc(h.title)}"
+                data-icon="${esc(h.icon || '')}" data-versions='${esc(JSON.stringify(h.versions))}'>
+          ${h.icon ? `<img src="${esc(h.icon)}" alt="" loading="lazy">` : '<div class="ph"></div>'}
+          <div class="info">
+            <div class="name">${esc(h.title)}</div>
+            <div class="desc">${esc(h.description)}</div>
+            <div class="dl">${nfmt(h.downloads)} installs</div>
+          </div>
+        </button>`).join('') || '<div class="list-empty">Nothing matched that search.</div>';
+      $('#mrMore').hidden = true;
+    } catch (e) {
+      box.innerHTML = `<div class="list-empty">Could not reach FTB — ${esc(e.message)}</div>`;
+    }
+    return;
+  }
+
   try {
     const r = await api(`/search/modrinth?q=${encodeURIComponent(q)}&offset=${state.mrOffset}&version=${encodeURIComponent(v)}&limit=24`);
     const html = r.hits.map(h => `
@@ -559,6 +655,25 @@ $('#mrResults').addEventListener('click', async e => {
   const pack = e.target.closest('.pack');
   if (!pack) return;
   $$('.pack', $('#mrResults')).forEach(p => p.classList.toggle('selected', p === pack));
+
+  // FTB packs carry their version list inline - no second request needed.
+  if (pack.dataset.ftb) {
+    const versions = JSON.parse(pack.dataset.versions || '[]');
+    state.pick = { ftb: Number(pack.dataset.ftb), title: pack.dataset.title, icon: pack.dataset.icon };
+    state.pickVersions = [];
+    const old = $('#mrVersionPick'); if (old) old.remove();
+    const holder = document.createElement('div');
+    holder.className = 'version-pick';
+    holder.id = 'mrVersionPick';
+    holder.innerHTML = `<label for="mrVersion">Pack version</label>
+      <select id="mrVersion">${versions.map((v, i) =>
+        `<option value="${v.id}" ${i === 0 ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}</select>`;
+    $('[data-panel=modpack]').appendChild(holder);
+    $('#mrVersion').addEventListener('change', updateSummary);
+    updateSummary();
+    return;
+  }
+
   state.pick = { slug: pack.dataset.slug, title: pack.dataset.title, icon: pack.dataset.icon };
   state.pickVersions = [];
   updateSummary();
@@ -780,7 +895,10 @@ function updateSummary() {
   if (tab === 'modpack') {
     if (state.pick) {
       const v = currentPickVersion();
-      text = `<b>${esc(state.pick.title)}</b>${v ? ' · ' + esc(v.version_number) + ' · MC ' + esc(v.game_versions[0] || '?') : ''}`;
+      const sel = $('#mrVersion');
+      text = state.pick.ftb
+        ? `<b>${esc(state.pick.title)}</b> · FTB${sel ? ' · ' + esc(sel.selectedOptions[0].textContent.trim()) : ''}`
+        : `<b>${esc(state.pick.title)}</b>${v ? ' · ' + esc(v.version_number) + ' · MC ' + esc(v.game_versions[0] || '?') : ''}`;
       ok = true;
     } else text = 'Pick a modpack to begin';
   } else if (tab === 'mods') {
@@ -858,7 +976,16 @@ function sharedSpec() {
 $('#btnCreate').onclick = async () => {
   const tab = activeCreateTab();
   const spec = sharedSpec();
-  if (tab === 'modpack') {
+  if (tab === 'modpack' && state.pick?.ftb) {
+    Object.assign(spec, {
+      kind: 'ftb',
+      name: state.pick.title,
+      ftb_id: state.pick.ftb,
+      ftb_version_id: $('#mrVersion') ? Number($('#mrVersion').value) : null,
+      icon: state.pick.icon || null,
+      source_label: 'FTB: ' + state.pick.title,
+    });
+  } else if (tab === 'modpack') {
     const v = currentPickVersion();
     Object.assign(spec, {
       kind: 'modrinth',
@@ -1053,14 +1180,17 @@ async function renderConfig(id) {
         The last is the direct LAN address. Disk used: ${(s.disk_mb / 1024).toFixed(1)} GB ·
         Created ${esc((s.created || '').slice(0, 10))}</p>
     </div>
-    ${(sp.mods && sp.mods.length) ? `
+    ${((sp.mods && sp.mods.length) || s.kind === 'modrinth') ? `
     <div class="field">
-      <label>Client pack</label>
-      <p class="hint" style="margin:0 0 9px">This world runs ${sp.mods.length} hand-picked mods.
-        Download the pack and open it in the <b>Modrinth app</b> (or Prism, ATLauncher, MultiMC)
-        and your client will match the server exactly — same mods, same versions.</p>
+      <label>Play this world</label>
+      <p class="hint" style="margin:0 0 9px">${sp.mods && sp.mods.length
+        ? `This world runs ${sp.mods.length} hand-picked mods.`
+        : 'This world runs a Modrinth modpack.'}
+        Download the pack and open it in the <b>Modrinth app</b> (or Prism, ATLauncher,
+        MultiMC). It installs the exact mods the server runs <b>and adds this server to your
+        Multiplayer list</b>, so there is nothing to type.</p>
       <a class="btn primary sm" href="/api/servers/${id}/mrpack" download>
-        <svg class="ico"><use href="#i-archive"/></svg>Download .mrpack</a>
+        <svg class="ico"><use href="#i-archive"/></svg>Download &amp; play</a>
     </div>` : ''}
     ${dom ? `
     <div class="field">
@@ -1099,11 +1229,11 @@ async function renderConfig(id) {
       </div>
       <div class="field">
         <label for="cfgPort">Port</label>
-        <input id="cfgPort" type="number" min="25565" max="25640" value="${esc(s.port)}">
+        <input id="cfgPort" type="number" min="25566" max="25640" value="${esc(s.port)}">
       </div>
     </div>
-    <p class="hint" style="margin:-8px 0 15px">Put a server on <b>25565</b> and players can join
-      with the bare hostname — no <code>:port</code> to remember.</p>
+    <p class="hint" style="margin:-8px 0 15px">This port is for direct LAN connections.
+      Your server hostname already works without a port; 25565 is reserved for the router.</p>
     <div class="field">
       <label for="cfgMotd">MOTD</label>
       <input id="cfgMotd" value="${esc(sp.motd || '')}" placeholder="${esc(s.name)}">
@@ -1238,7 +1368,7 @@ $('#btnSettings').onclick = async () => {
   $('#setRoutes').innerHTML = !r.ok
     ? `<p class="hint">mc-router is not answering: ${esc(r.error || 'unknown')}</p>`
     : keys.length
-      ? keys.sort().map(k => `<div class="route"><span>${esc(k)}</span><small>${esc(routes[k])}</small></div>`).join('')
+      ? keys.sort().map(k => `<div class="route"><span>${esc(k)}</span><small>${esc(typeof routes[k] === 'string' ? routes[k] : routes[k]?.backend || 'Route available')}</small></div>`).join('')
       : '<p class="hint">No routes yet — start a server and it appears here automatically.</p>';
 
   $('#setStorage').textContent = 'Checking…';
@@ -1289,36 +1419,39 @@ $('#btnSaveSettings').onclick = async () => {
 $('#btnConnectHelp').onclick = () => {
   const h = state.host;
   $('#joinBody').innerHTML = `
-    <p class="panel-note">In Minecraft: <b>Multiplayer → Add Server</b>, paste the address into
-      <b>Server Address</b>, then Done → Join. Each card shows its own address — copy it from there.</p>
-    <div class="field">
-      <label>At home</label>
-      <div class="addr"><span class="a">${esc(h.lan_host)}:PORT</span></div>
-      <p class="hint">Works for anyone on your Wi-Fi with nothing installed.</p>
-    </div>
-    <div class="field">
-      <label>From anywhere</label>
-      <div class="addr"><span class="a">${esc(dom ? 'name.' + dom : 'no domain configured')}</span></div>
-      <p class="hint">Every server gets its own name automatically — no port to remember and
-        nothing to set up per server. It works because Minecraft sends the hostname it dialled
-        inside its handshake, so one listener on 25565 routes each player to the right world.</p>
-    </div>
-    <p class="panel-note">This needs <b>two one-time steps</b>, then never again:<br>
-      <b>1.</b> Cloudflare DNS → add an <b>A</b> record, name <code>*.${esc(dom || 'mc')}</code>,
-      value = your home IP, <b>DNS only (grey cloud)</b>.<br>
-      <b>2.</b> Router → forward TCP <b>25565</b> to <code>${esc(h.lan_host)}</code>.<br>
-      Every server you create from then on is reachable the moment it starts.</p>
-    <p class="panel-note warn">A Cloudflare <b>Tunnel</b> cannot carry the game itself: on the free
-      plan cloudflared proxies HTTP only, and Minecraft speaks raw TCP. Arbitrary TCP through
-      Cloudflare needs Spectrum, which is enterprise-only. Use the tunnel for <em>this panel</em>
-      and plain Cloudflare <b>DNS</b> for the game.</p>
-    <p class="hint">Prefer not to forward a port? Run a <a href="https://playit.gg" target="_blank"
-      rel="noopener">playit.gg</a> agent pointed at <code>${esc(h.lan_host)}:25565</code> and put the
-      address it gives you in each server's <b>Override the public address</b> field.</p>`;
+    <p class="panel-note">Open <b>Minecraft Java Edition → Multiplayer → Add Server</b>.
+      Paste your world’s address, select <b>Done</b>, then join.</p>
+    <h3 class="join-heading">Choose your connection</h3>
+    <p class="hint">At home, the LAN address connects directly. Use the hostname when playing from outside your home, or when local DNS is configured.</p>
+    <div class="join-worlds">${state.servers.map(s => `
+      <section class="join-world"><h3>${esc(s.name)}</h3>
+        <label>On your home network</label><div class="addr"><span class="a">${esc(s.connect.lan)}</span><button data-join-copy="${esc(s.connect.lan)}">Copy LAN</button></div>
+        ${s.connect.public ? `<label>Server hostname / public address</label><div class="addr"><span class="a">${esc(s.connect.public)}</span><button data-join-copy="${esc(s.connect.public)}">Copy address</button></div>` : ''}
+      </section>`).join('') || '<p class="hint">Create a world first. Its connection addresses will appear here.</p>'}</div>
+    <p class="panel-note">Playing a modpack? Install the same pack and Minecraft version on your computer. For a custom pack, download the client pack from <b>Manage → Settings</b>.</p>
+    <details class="join-troubleshooting"><summary>Hostname not working at home?</summary><p>Your router may not support connecting to its public address from inside the house. Use the LAN address above, or configure your computer to use a working local DNS resolver.</p><p>The host is <code>${esc(h.lan_host || 'not available')}</code>. Keep your normal router as the default gateway.</p></details>`;
+  $$('[data-join-copy]', $('#joinBody')).forEach(btn => btn.onclick = () => copy(btn.dataset.joinCopy, 'Server address'));
   openModal('#joinModal');
 };
 
 /* ---------- boot ---------- */
+
+$$('[data-create-tab]').forEach(btn => btn.addEventListener('click', async () => {
+  await openCreate();
+  $(`#createTabs [data-tab="${btn.dataset.createTab}"]`)?.click();
+}));
+$('[data-guide="join"]').onclick = () => $('#btnConnectHelp').click();
+$('[data-guide="backups"]').onclick = () => {
+  toast('Snapshots live with each world', 'Choose Manage on a world, then open Snapshots to create, download, or restore a backup.');
+  $('#worldsTitle').scrollIntoView({behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block:'center'});
+};
+$$('.modal').forEach((modal, i) => {
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  const title = $('h2', modal);
+  if (title) {if (!title.id) title.id = `dialog-title-${i}`;modal.setAttribute('aria-labelledby', title.id);}
+});
+$$('.icon-btn[data-close]').forEach(btn => btn.setAttribute('aria-label','Close dialog'));
 
 refresh();
 // Nothing running means nothing changes, so poll lazily; speed up only when
@@ -1333,3 +1466,6 @@ setInterval(() => {
   }
 }, 5000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(); });
+
+// Switching source resets paging and re-runs the search.
+$('#mrSource').addEventListener('change', () => { state.mrOffset = 0; state.pick = null; searchModrinth(true); updateSummary(); });

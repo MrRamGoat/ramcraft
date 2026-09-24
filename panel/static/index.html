@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>RamCraft</title>
+<title>RamCraft — Your worlds, together.</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%235ac45a'/><rect x='18' y='18' width='28' height='28' fill='%23103a10'/><rect x='54' y='18' width='28' height='28' fill='%23103a10'/><rect x='18' y='58' width='64' height='24' fill='%23103a10'/></svg>">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 </head>
 <body>
 
@@ -78,28 +78,63 @@
   </symbol>
 </defs></svg>
 
-<header class="topbar">
+<a class="skip-link" href="#worlds">Skip to your worlds</a>
+<aside class="sidebar" aria-label="Workspace navigation">
   <div class="brand">
-    <span class="logo-mark" aria-hidden="true"><svg viewBox="0 0 8 8"><use href="#i-creeper"/></svg></span>
+    <span class="logo-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><use href="#i-box"/></svg></span>
     <div>
-      <h1>RamCraft</h1>
-      <p class="tagline">Minecraft hosting, one click</p>
+      <span class="brand-name">ramcraft<span>.</span></span>
+      <p class="tagline">A home for your worlds</p>
     </div>
   </div>
-  <div class="host-stats" id="hostStats"></div>
-  <div class="topbar-actions">
-    <button class="btn ghost" id="btnConnectHelp" title="How players join">
-      <svg class="ico"><use href="#i-help"/></svg>How to join</button>
-    <button class="btn ghost" id="btnSettings" title="Settings">
-      <svg class="ico"><use href="#i-sliders"/></svg>Settings</button>
-    <button class="btn primary" id="btnNew">
-      <svg class="ico"><use href="#i-plus"/></svg>New world</button>
+  <div class="workspace-switch"><span class="workspace-avatar">R</span><div>Personal workspace<small>Minecraft Java Edition</small></div></div>
+  <nav class="side-nav" aria-label="Main">
+    <a href="#worlds" class="nav-item active" aria-current="page"><svg class="ico"><use href="#i-server"/></svg>Your worlds <span id="navWorldCount" class="nav-count">—</span></a>
+    <button class="nav-item" data-create-tab="modpack"><svg class="ico"><use href="#i-box"/></svg>Discover modpacks</button>
+    <button class="nav-item" data-create-tab="mods"><svg class="ico"><use href="#i-pickaxe"/></svg>Build a modpack</button>
+  </nav>
+  <div class="side-divider"></div>
+  <nav class="side-nav" aria-label="Workspace tools">
+    <button class="nav-item" id="btnConnectHelp"><svg class="ico"><use href="#i-link"/></svg>How to join</button>
+    <button class="nav-item" id="btnSettings"><svg class="ico"><use href="#i-sliders"/></svg>Settings</button>
+  </nav>
+  <div class="sidebar-bottom">
+    <div class="little-world" aria-hidden="true"><svg viewBox="0 0 24 24"><use href="#i-box"/></svg></div>
+    <p>Less setup.<br><strong>More adventure.</strong></p>
+    <div class="workspace-owner"><span class="workspace-avatar">R</span><div>RamCraft<small>Your personal game space</small></div></div>
   </div>
-</header>
-
-<main id="grid" class="grid">
-  <div class="loading-state">Loading servers…</div>
-</main>
+</aside>
+<div class="workspace-main">
+  <header class="workspace-topbar">
+    <div class="breadcrumb">Workspace <span>/</span> <strong>Overview</strong></div>
+    <div id="connectionStatus" class="connection-status" role="status"><span class="connection-dot"></span><span>Connecting to host</span></div>
+  </header>
+  <main class="dashboard" id="worlds" tabindex="-1">
+    <section class="page-heading" aria-labelledby="pageTitle">
+      <div><h1 id="pageTitle">Your worlds, together<span>.</span></h1><p>A place to build, explore, and get a little lost.</p></div>
+      <button class="btn primary" id="btnNew"><svg class="ico"><use href="#i-plus"/></svg>Create a world</button>
+    </section>
+    <section class="adventure-banner" aria-label="Start your next adventure">
+      <img class="landscape" src="landscape.svg" alt="" aria-hidden="true">
+      <div class="banner-copy"><span class="banner-label"><svg class="ico"><use href="#i-cube"/></svg>Big ideas. Infinite blocks.</span><h2>The next adventure<br>starts here.</h2><p>Pick a pack. Bring your friends.<br>Make something worth coming back to.</p><button class="banner-action" data-create-tab="modpack">Explore modpacks <span aria-hidden="true">↗</span></button></div>
+      <span class="landscape-caption" aria-hidden="true">A little world. Endless possibilities.</span>
+    </section>
+    <section class="host-stats" id="hostStats" aria-label="Host resources"><div class="stats-loading">Reading host resources…</div></section>
+    <section class="world-section" aria-labelledby="worldsTitle">
+      <div class="world-toolbar"><div class="world-heading"><h2 id="worldsTitle">Your worlds</h2><span id="worldCount" class="count-badge">—</span></div><label class="world-search"><svg class="ico"><use href="#i-search"/></svg><input id="worldSearch" type="search" placeholder="Find a world…" aria-label="Find a world"></label></div>
+      <div class="world-filters" role="group" aria-label="Filter worlds"><button data-filter="all" class="world-filter active" aria-pressed="true">All worlds</button><button data-filter="online" class="world-filter" aria-pressed="false">Live</button><button data-filter="stopped" class="world-filter" aria-pressed="false">Asleep</button><span id="worldSummary">Fetching your worlds…</span></div>
+      <div id="dashboardError" class="dashboard-error" role="alert" hidden><div><strong>We couldn’t reach your host.</strong><p>Your last known world status may be out of date.</p></div><button class="btn" id="retryDashboard">Try again</button></div>
+      <div id="grid" class="grid"><div class="loading-state"><span class="skeleton-line"></span><span class="skeleton-line"></span><span>Loading your worlds…</span></div></div>
+      <div id="noMatches" class="no-matches" hidden><h3>No matching worlds</h3><p>Try another name or show all your worlds.</p><button class="btn" id="clearFilters">Clear filters</button></div>
+    </section>
+    <section class="getting-started" aria-labelledby="nextTitle"><div class="section-title"><h2 id="nextTitle">Make yourself at home</h2><span>A few things worth knowing</span></div><div class="guide-links">
+      <button class="guide-link" data-guide="join"><span class="guide-icon"><svg class="ico"><use href="#i-link"/></svg></span><span><b>Bring your people</b><small>Copy an address. Share the adventure.</small></span><span class="guide-arrow" aria-hidden="true">↗</span></button>
+      <button class="guide-link" data-create-tab="mods"><span class="guide-icon"><svg class="ico"><use href="#i-pickaxe"/></svg></span><span><b>Make it your own</b><small>Build a pack with your favorite mods.</small></span><span class="guide-arrow" aria-hidden="true">↗</span></button>
+      <button class="guide-link" data-guide="backups"><span class="guide-icon"><svg class="ico"><use href="#i-archive"/></svg></span><span><b>Keep the good stuff</b><small>Save a snapshot before the next big idea.</small></span><span class="guide-arrow" aria-hidden="true">↗</span></button>
+    </div></section>
+    <footer class="workspace-footer"><span>Built for the worlds you make.</span><span>RamCraft <span aria-hidden="true">·</span> Java Edition</span></footer>
+  </main>
+</div>
 
 <!-- ============ CREATE ============ -->
 <div class="modal-backdrop" id="createModal" hidden>
@@ -125,6 +160,10 @@
       <!-- Modrinth browser -->
       <section class="tab-panel active" data-panel="modpack">
         <div class="search-row">
+          <select id="mrSource" title="Where to search">
+            <option value="modrinth">Modrinth — 18,000+</option>
+            <option value="ftb">FTB — curated</option>
+          </select>
           <input type="search" id="mrQuery" placeholder="Search modpacks — try 'create', 'skyblock', 'better mc'…" autocomplete="off">
           <select id="mrVersionFilter" title="Filter by Minecraft version">
             <option value="">Any MC version</option>
@@ -460,34 +499,9 @@
   </div>
 </div>
 
-<footer class="botbar">
-  <div class="botbar-inner">
-    <div class="foot-card" data-foot="join">
-      <span class="f-ico"><svg class="ico"><use href="#i-link"/></svg></span>
-      <div>
-        <b>How players join</b>
-        <span>One address, same inside the house or out. No port to remember.</span>
-      </div>
-    </div>
-    <div class="foot-card" data-foot="mods">
-      <span class="f-ico"><svg class="ico"><use href="#i-pickaxe"/></svg></span>
-      <div>
-        <b>Build your own pack</b>
-        <span>Pick mods, then export a .mrpack so your client matches.</span>
-      </div>
-    </div>
-    <div class="foot-card" data-foot="snap">
-      <span class="f-ico"><svg class="ico"><use href="#i-chest"/></svg></span>
-      <div>
-        <b>Snapshots every night</b>
-        <span>Worlds saved at 04:30, last 7 kept. Restore from Manage.</span>
-      </div>
-    </div>
-  </div>
-  <div class="botbar-strip" aria-hidden="true"></div>
-</footer>
 
-<div class="toast-stack" id="toasts"></div>
+
+<div class="toast-stack" id="toasts" role="status" aria-live="polite"></div>
 <script src="app.js"></script>
 </body>
 </html>

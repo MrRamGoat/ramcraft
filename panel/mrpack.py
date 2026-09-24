@@ -16,6 +16,8 @@ import zipfile
 
 import httpx
 
+import nbt
+
 MODRINTH_API = "https://api.modrinth.com/v2"
 FABRIC_META = "https://meta.fabricmc.net/v2/versions/loader"
 NEOFORGE_META = "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml"
@@ -74,7 +76,46 @@ async def _neoforge_version(client: httpx.AsyncClient, mc_version: str) -> str:
         return ""
 
 
-async def build(name: str, mc_version: str, loader: str, slugs: list[str]) -> tuple[bytes, dict]:
+def _inject_server(data: bytes, pack_name: str, address: str) -> bytes:
+    """Drop a servers.dat into the pack's overrides so the server is already
+    in the player's Multiplayer list when the pack finishes installing."""
+    if not address:
+        return data
+    src = zipfile.ZipFile(io.BytesIO(data))
+    out_buf = io.BytesIO()
+    with zipfile.ZipFile(out_buf, "w", zipfile.ZIP_DEFLATED) as out:
+        for item in src.infolist():
+            # Never ship two servers.dat; ours wins.
+            if item.filename.endswith("overrides/servers.dat"):
+                continue
+            out.writestr(item, src.read(item.filename))
+        out.writestr("overrides/servers.dat",
+                     nbt.servers_dat([{"name": pack_name, "ip": address}]))
+    return out_buf.getvalue()
+
+
+async def from_published_pack(file_url: str, pack_name: str, address: str) -> tuple[bytes, dict]:
+    """Take a modpack's OWN published .mrpack and add the server to it.
+
+    For a server built from a published pack this beats rebuilding the file
+    list ourselves: the author's pack is authoritative, including overrides,
+    configs and exact file versions - we only add the address.
+    """
+    async with httpx.AsyncClient(timeout=120, headers=UA, follow_redirects=True) as client:
+        r = await client.get(file_url)
+        r.raise_for_status()
+        data = r.content
+    try:
+        included = len(json.loads(
+            zipfile.ZipFile(io.BytesIO(data)).read("modrinth.index.json")
+        ).get("files", []))
+    except Exception:
+        included = 0
+    return _inject_server(data, pack_name, address), {"included": included, "skipped": []}
+
+
+async def build(name: str, mc_version: str, loader: str, slugs: list[str],
+                address: str = "") -> tuple[bytes, dict]:
     """Returns (zip bytes, report). The report names anything that was skipped
     so the UI can say so rather than quietly shipping an incomplete pack."""
     files, skipped = [], []
@@ -124,5 +165,9 @@ async def build(name: str, mc_version: str, loader: str, slugs: list[str]) -> tu
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("modrinth.index.json", json.dumps(index, indent=2))
-        z.writestr("overrides/.gitkeep", "")
+        if address:
+            z.writestr("overrides/servers.dat",
+                       nbt.servers_dat([{"name": name, "ip": address}]))
+        else:
+            z.writestr("overrides/.gitkeep", "")
     return buf.getvalue(), {"included": len(files), "skipped": skipped}

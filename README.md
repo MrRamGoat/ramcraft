@@ -377,3 +377,31 @@ ssh pve "pct exec 105 -- docker logs --tail 50 mc-<server-id>"
 ```bash
 ssh pve "pct exec 105 -- bash /usr/local/bin/ramcraft-backup.sh"
 ```
+
+## Modpack sources
+
+| Source | Key needed | Size | How |
+|---|---|---|---|
+| **Modrinth** | no | ~18,450 modpacks | Live search, version pinning (`TYPE=MODRINTH`) |
+| **FTB** | no | 94 curated packs | Whole catalogue cached hourly (`TYPE=FTBA`) |
+| **CurseForge** | no, via zip | everything | Upload the pack's Server Pack (`CF_SERVER_MOD`) |
+| CurseForge API | yes, approval | everything | Paste a page URL (`AUTO_CURSEFORGE`) |
+| **Pick mods** | no | ~19,000 mods | Build your own (`MODRINTH_PROJECTS`) |
+
+⚠️ FTB's API returns version type as lowercase **`release`**; matching `"Release"` silently
+returned zero packs. Its catalogue is ~100 packs fetched as 94 parallel detail requests — 4 s
+cold, 4 ms warm from the hourly cache — so it is filtered server-side with no paging.
+
+## Install-and-play
+
+`GET /api/servers/<id>/mrpack` returns a client pack **with the server already in it**:
+
+- For a **Modrinth modpack** server it ships the author's own published `.mrpack` — their
+  overrides, configs and exact file versions — and only adds the address. Rebuilding the file
+  list ourselves would lose all of that.
+- For a **hand-picked mod list** it builds the index from the chosen mods.
+
+Either way `panel/nbt.py` writes an `overrides/servers.dat` naming this server, so when the pack
+finishes installing the server is **already in the player's Multiplayer list**. Install, open
+Minecraft, click it. `servers.dat` is uncompressed big-endian NBT — unlike `level.dat`, it is
+not gzipped.
