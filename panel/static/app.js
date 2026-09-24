@@ -153,6 +153,12 @@ const CARD_TEMPLATE = `
     <button class="btn danger" data-act="stop" data-f="btnStop"><span class="spinner" data-f="spinStop" hidden></span>Stop</button>
     <button class="btn narrow" data-act="restart" data-f="btnRestart" title="Restart">↻</button>
     <button class="btn" data-act="open">Manage</button>
+    <button class="btn narrow danger" data-act="delete" title="Delete this server" aria-label="Delete server">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>
+      </svg>
+    </button>
   </div>`;
 
 function buildCard(s) {
@@ -195,6 +201,8 @@ function patchCard(el, s) {
 
   f.state.className = 'state ' + st;
   f.stateText.textContent = STATE_LABEL[st] || st;
+  // The card itself carries the state so CSS can tint its edge and accent bar.
+  el.className = 'card is-' + st;
 
   const showMeters = running && stats.mem_limit_mb;
   f.meters.hidden = !showMeters;
@@ -258,8 +266,9 @@ function renderServers() {
     }
     return;
   }
-  const empty = $('.empty-state', grid);
-  if (empty) empty.remove();
+  // Both placeholders must go: the loading one ships in the HTML and the empty
+  // one is added below, and leaving either leaves a stray line above the cards.
+  $$('.empty-state, .loading-state', grid).forEach(el => el.remove());
 
   const seen = new Set();
   for (const s of state.servers) {
@@ -327,8 +336,28 @@ $('#grid').addEventListener('click', e => {
   const id = btn.closest('.card').dataset.id;
   const action = btn.dataset.act;
   if (action === 'open') return openDetail(id);
+  if (action === 'delete') return deleteServer(id);
   act(id, action);
 });
+
+async function deleteServer(id) {
+  const s = state.servers.find(x => x.id === id);
+  const name = s ? s.name : id;
+  // Exactly one confirmation. This wipes the world AND its backups, and there
+  // is no undo - so it is one click to reach, never one click to destroy.
+  if (!confirm(`Delete "${name}"?\n\nThis erases the world and every backup of it, permanently. There is no undo.`)) return;
+  state.busy.add(id);
+  renderServers();
+  try {
+    const r = await api(`/servers/${id}?wipe=true`, { method: 'DELETE' });
+    toast(`Deleted ${name}`, r.freed_mb ? `${r.freed_mb} MB reclaimed` : '');
+  } catch (e) {
+    toast('Delete failed', e.message, 'err');
+  } finally {
+    state.busy.delete(id);
+    await refresh();
+  }
+}
 
 /* ---------- modal plumbing ---------- */
 
@@ -509,29 +538,30 @@ $('#optSubdomain').addEventListener('input', () => {
 
 /* ---------- server pack upload (the no-API-key CurseForge route) ---------- */
 
-state.uploadedPack = null;   // {path, name, size_mb}
+state.uploadedPack = null;   // server pack zip  {path, name, size_mb}
+state.uploadedWorld = null;  // adventure map zip
 
-function wirePackDrop() {
-  const drop = $('#cfDrop'), input = $('#cfFile'), label = $('#cfDropText');
-  if (!drop) return;
+function wireDrop({ drop, input, label, idle, nameField, onDone }) {
+  const dropEl = $(drop), inputEl = $(input), labelEl = $(label);
+  if (!dropEl) return;
 
-  drop.onclick = () => input.click();
+  dropEl.onclick = () => inputEl.click();
   ['dragenter', 'dragover'].forEach(ev =>
-    drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+    dropEl.addEventListener(ev, e => { e.preventDefault(); dropEl.classList.add('over'); }));
   ['dragleave', 'drop'].forEach(ev =>
-    drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
-  drop.addEventListener('drop', e => {
+    dropEl.addEventListener(ev, e => { e.preventDefault(); dropEl.classList.remove('over'); }));
+  dropEl.addEventListener('drop', e => {
     const f = e.dataTransfer?.files?.[0];
-    if (f) sendPack(f);
+    if (f) send(f);
   });
-  input.onchange = () => { if (input.files[0]) sendPack(input.files[0]); };
+  inputEl.onchange = () => { if (inputEl.files[0]) send(inputEl.files[0]); };
 
-  async function sendPack(file) {
+  async function send(file) {
     if (!file.name.toLowerCase().endsWith('.zip')) {
-      toast('That is not a .zip', 'Use the pack’s Server Pack download.', 'err');
+      toast('That is not a .zip', 'It needs to be a zip archive.', 'err');
       return;
     }
-    label.innerHTML = `<span class="spinner"></span> Uploading ${esc(file.name)}…`;
+    labelEl.innerHTML = `<span class="spinner"></span> Uploading ${esc(file.name)}…`;
     const body = new FormData();
     body.append('file', file);
     try {
@@ -539,21 +569,32 @@ function wirePackDrop() {
       const res = await fetch('/api/uploads', { method: 'POST', body });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'upload failed');
-      state.uploadedPack = data;
-      drop.classList.add('has-file');
-      label.textContent = `${data.name} — ${data.size_mb} MB ✓`;
-      if (!$('#cfName').value.trim()) {
-        $('#cfName').value = data.name.replace(/\.zip$/i, '').replace(/[-_]/g, ' ').slice(0, 40);
+      onDone(data);
+      dropEl.classList.add('has-file');
+      labelEl.textContent = `${data.name} — ${data.size_mb} MB ✓`;
+      if (nameField && !$(nameField).value.trim()) {
+        $(nameField).value = data.name.replace(/\.zip$/i, '').replace(/[-_]/g, ' ').slice(0, 40);
       }
       updateSummary();
     } catch (e) {
-      label.textContent = 'Drop the server pack .zip here, or click to choose';
-      drop.classList.remove('has-file');
+      labelEl.textContent = idle;
+      dropEl.classList.remove('has-file');
+      onDone(null);
       toast('Upload failed', e.message, 'err');
     }
   }
 }
-wirePackDrop();
+
+wireDrop({
+  drop: '#cfDrop', input: '#cfFile', label: '#cfDropText', nameField: '#cfName',
+  idle: 'Drop the server pack .zip here, or click to choose',
+  onDone: d => { state.uploadedPack = d; },
+});
+wireDrop({
+  drop: '#advDrop', input: '#advFile', label: '#advDropText', nameField: '#advName',
+  idle: 'Drop the map .zip here, or click to choose',
+  onDone: d => { state.uploadedWorld = d; },
+});
 
 function currentCreateName() {
   const tab = activeCreateTab();
@@ -578,9 +619,21 @@ function updateSummary() {
       ok = true;
     } else text = 'Pick a modpack to begin';
   } else if (tab === 'adventure') {
-    ok = !!($('#advName').value.trim() && $('#advWorld').value.trim());
-    text = ok ? `<b>${esc($('#advName').value.trim())}</b> · adventure map on ${esc($('#advType').value)} ${esc($('#advVersion').value)}`
-              : 'Name the server and paste a world .zip link';
+    const typed = $('#advWorld').value.trim();
+    const world = state.uploadedWorld ? state.uploadedWorld.name : typed;
+    ok = !!($('#advName').value.trim() && world);
+    text = ok ? `<b>${esc($('#advName').value.trim())}</b> · ${esc($('#advType').value)} ${esc($('#advVersion').value)}`
+              : 'Name the server and add a world .zip';
+    // Map sites hand out page links, not files, and block server-side fetches -
+    // pasting one downloads an HTML page and the server dies on "Unsupported
+    // archive type: text/html". Catch it here instead.
+    if (!state.uploadedWorld && typed) {
+      const looksDirect = /\.zip(\?|$)/i.test(typed);
+      if (!looksDirect) {
+        text += ' &nbsp;·&nbsp; <b style="color:var(--amber)">that is a page link, not a .zip — download it and drop it above</b>';
+        ok = false;
+      }
+    }
   } else if (tab === 'plain') {
     ok = !!$('#plainName').value.trim();
     const pv = $('#plainVersion').value;
@@ -648,7 +701,7 @@ $('#btnCreate').onclick = async () => {
     Object.assign(spec, {
       kind: $('#advType').value,
       name: $('#advName').value.trim(),
-      world_url: $('#advWorld').value.trim(),
+      world_url: state.uploadedWorld ? state.uploadedWorld.path : $('#advWorld').value.trim(),
       mc_version: $('#advVersion').value,
       source_label: 'Adventure map',
       gamemode: spec.gamemode,

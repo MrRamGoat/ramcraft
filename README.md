@@ -28,8 +28,9 @@ Docker daemon.
 - **Modpacks** — searches the live Modrinth catalogue in the panel. Pick a pack, pick a
   version, press Create. It downloads the pack, the right mod loader and the right Java,
   then boots. CurseForge packs work too (needs a free API key in Settings).
-- **Adventure maps** — paste a world `.zip` URL; it is downloaded, unpacked as the world and
-  served on whichever server type/version you choose.
+- **Adventure maps** — drop in a world `.zip` (or a direct link); it is unpacked as the world
+  and served on whichever server type/version you choose.
+- **CurseForge packs with no API key** — upload the pack's **Server Pack** zip.
 - **Plain servers** — Vanilla, Paper, Purpur, Fabric, Forge, NeoForge, Quilt, Spigot.
 - **Start / Stop / Restart** per server from the card.
 - **Console** with live log streaming and a command box (over RCON).
@@ -229,6 +230,27 @@ only, and Minecraft speaks raw TCP; arbitrary TCP needs Cloudflare Spectrum, whi
 enterprise-only. If port-forwarding is unacceptable, run a **playit.gg** agent pointed at
 `192.168.1.63:25565` and put the address it hands out in each server's *Override the public
 address* field — but then hostname routing is bypassed and each server needs its own tunnel.
+
+## Getting packs and maps in without an API key
+
+Uploads land in `/srv/mc/_uploads` and are bind-mounted **read-only into every Minecraft
+container at `/modpacks`**. That mount is the whole trick: the container otherwise only sees
+its own `/data`, so a host path like `/srv/mc/_uploads/x.zip` would simply not exist to it.
+`build_env()` rewrites any non-URL pack or world path to `/modpacks/<basename>`.
+
+- **CurseForge-only packs** (All the Mods, RLCraft, DawnCraft…) — download the pack's
+  **Server Pack** zip from its Files tab in a browser and upload it. This uses the legacy
+  `TYPE=CURSEFORGE` + `CF_SERVER_MOD` path, which takes a zip by file or URL and needs
+  **no API key at all**. The key only buys pasting a URL instead.
+- **Adventure maps** — same, via `WORLD`, which also accepts a local file or a URL.
+
+⚠️ **Map sites serve page links, not files, and block server-side fetches.** Pasting a Planet
+Minecraft link downloads an HTML page and the server dies with
+`Unsupported archive type: text/html`, then `403 Forbidden` on retry. The create form now
+refuses any adventure-map URL that is not a direct `.zip` and tells you to upload instead.
+
+Sources that work: Planet Minecraft, MinecraftMaps, CurseForge Worlds (all download-then-upload).
+Modrinth hosts no maps. Neither Modrinth nor FTB carries All the Mods — it is CurseForge-only.
 
 ## Network isolation (DMZ)
 

@@ -313,7 +313,12 @@ def build_env(spec: dict, rcon_password: str) -> dict:
     # An adventure map is just a world zip dropped on top of whatever server
     # type was chosen above - that trick works for every type.
     if spec.get("world_url"):
-        env["WORLD"] = spec["world_url"]
+        world = spec["world_url"]
+        # Same rewrite as the server pack: an uploaded map sits in _uploads on
+        # the host, which the container only sees at PACKS_MOUNT.
+        if not world.startswith(("http://", "https://")):
+            world = f"{PACKS_MOUNT}/{Path(world).name}"
+        env["WORLD"] = world
     if spec.get("datapack_urls"):
         env["DATAPACKS"] = spec["datapack_urls"]
     if spec.get("mod_urls"):

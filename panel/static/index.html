@@ -63,17 +63,24 @@
       <!-- Adventure map -->
       <section class="tab-panel" data-panel="adventure">
         <p class="panel-note">
-          Paste a direct link to a world <code>.zip</code> (from Planet Minecraft, MinecraftMaps,
-          a Drive direct link, anything). RamCraft downloads it, unpacks it as the world and
-          boots a server on the matching version.
+          Drop in a world <code>.zip</code> from <a href="https://www.planetminecraft.com/projects/"
+          target="_blank" rel="noopener">Planet&nbsp;Minecraft</a>,
+          <a href="https://www.minecraftmaps.com/" target="_blank" rel="noopener">MinecraftMaps</a>
+          or <a href="https://www.curseforge.com/minecraft/worlds" target="_blank"
+          rel="noopener">CurseForge&nbsp;Worlds</a>. RamCraft unpacks it as the world and boots a
+          server on the version you pick.
         </p>
         <div class="field">
           <label for="advName">Server name</label>
           <input id="advName" placeholder="The Dropper">
         </div>
         <div class="field">
-          <label for="advWorld">World .zip URL</label>
-          <input id="advWorld" placeholder="https://…/the-dropper.zip">
+          <label>World .zip</label>
+          <div class="pack-drop" id="advDrop">
+            <input type="file" id="advFile" accept=".zip" hidden>
+            <span id="advDropText">Drop the map .zip here, or click to choose</span>
+          </div>
+          <input id="advWorld" placeholder="…or paste a direct link to the .zip" style="margin-top:9px">
         </div>
         <div class="field-row">
           <div class="field">
