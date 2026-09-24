@@ -123,6 +123,16 @@ plain `--force-recreate` would silently keep running the old code.
   screenshot showed the shared Memory/Difficulty controls had been pushed 316px below the fold
   under a 24-item modpack grid. `.shared-options` is pinned outside the scroll region for that
   reason, with its own `max-height` so "More options" still scrolls.
+- **Check it at the width people actually use.** Everything was built and verified in a ~700px
+  preview pane; on a 1568px monitor it read as a phone layout stranded on a desktop — tiny type,
+  microscopic header stats, a small blob adrift in dead space. Base font is 16px, the header
+  stats are real blocks, and the empty state is a quick-start grid that fills the window.
+- 🔴 **Behind the Cloudflare tunnel, versionless CSS/JS will be served stale against fresh HTML.**
+  `craft.ramflix.xyz` rendered the new markup with the *previous* stylesheet — which looks
+  catastrophically broken, not merely out of date, and is easy to mistake for a CSS bug. `/` is
+  therefore served by a hand-written route that stamps `?v=<hash of static mtimes>` onto
+  `style.css` and `app.js` and sends `no-store` for the HTML itself; versioned assets are then
+  safe to cache `immutable`. A hard reload (ctrl+shift+R) only masks this for one person.
 - **Appending log lines one at a time froze the tab for ~29 s.** Each `appendLog` read
   `scrollHeight` and wrote `scrollTop`, forcing a reflow per line; 250 + streamed lines on a
   growing console blocked the main thread. Lines are buffered and flushed in one batch with a

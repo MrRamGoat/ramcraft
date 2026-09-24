@@ -267,16 +267,43 @@ function renderServers() {
 
   if (!state.servers.length) {
     if (!$('.empty-state', grid)) {
+      const dom = state.host.router_domain;
       grid.innerHTML = `
         <div class="empty-state">
           <div class="empty-art"><svg class="ico"><use href="#i-box"/></svg></div>
-          <h3>Nothing running yet</h3>
-          <p>Pick a modpack, drop in an adventure map, or build a plain world.
-             RamCraft fetches everything, boots it, and hands you an address.</p>
-          <button class="btn primary" id="emptyCreate">
-            <svg class="ico"><use href="#i-plus"/></svg>Create your first world</button>
+          <h3>Let's build a world</h3>
+          <p>Pick a route below. RamCraft downloads everything, picks the right Java,
+             boots it, and hands you an address${dom ? ' under <b>' + esc(dom) + '</b>' : ''}.</p>
+          <div class="start-grid">
+            <button class="start-tile" data-start="modpack">
+              <span class="t-ico"><svg class="ico"><use href="#i-box"/></svg></span>
+              <b>Modpack</b>
+              <span>Browse thousands on Modrinth and install one in two clicks.</span>
+            </button>
+            <button class="start-tile" data-start="adventure">
+              <span class="t-ico"><svg class="ico"><use href="#i-map"/></svg></span>
+              <b>Adventure map</b>
+              <span>Drop in a world .zip and play it with friends.</span>
+            </button>
+            <button class="start-tile" data-start="mods">
+              <span class="t-ico"><svg class="ico"><use href="#i-sliders"/></svg></span>
+              <b>Pick your own mods</b>
+              <span>Build a custom pack, then export it for your client.</span>
+            </button>
+            <button class="start-tile" data-start="plain">
+              <span class="t-ico"><svg class="ico"><use href="#i-cube"/></svg></span>
+              <b>Plain world</b>
+              <span>Vanilla, Paper or Fabric — clean and fast.</span>
+            </button>
+          </div>
         </div>`;
-      $('#emptyCreate').onclick = openCreate;
+      $$('.start-tile', grid).forEach(t => {
+        t.onclick = async () => {
+          await openCreate();
+          const tab = $(`#createTabs [data-tab="${t.dataset.start}"]`);
+          if (tab) tab.click();
+        };
+      });
     }
     return;
   }

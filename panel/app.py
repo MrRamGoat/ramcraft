@@ -1,5 +1,6 @@
 """RamCraft - one-click Minecraft server hosting panel."""
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -9,7 +10,7 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, HTTPException, Body, UploadFile, File
-from fastapi.responses import StreamingResponse, FileResponse, PlainTextResponse, Response
+from fastapi.responses import StreamingResponse, FileResponse, PlainTextResponse, Response, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 import mrpack
@@ -619,6 +620,53 @@ def host_info():
 @app.get("/api/health")
 def health():
     return {"ok": True}
+
+
+# --- static, with cache busting ---------------------------------------------
+
+def _asset_version() -> str:
+    """Changes whenever a static file changes, so the URL changes with it."""
+    try:
+        stamp = "".join(
+            f"{p.name}{p.stat().st_mtime_ns}"
+            for p in sorted(STATIC.iterdir()) if p.is_file()
+        )
+        return hashlib.sha1(stamp.encode()).hexdigest()[:10]
+    except Exception:
+        return str(int(time.time()))
+
+
+@app.get("/", include_in_schema=False)
+def index():
+    """Served by hand rather than by StaticFiles so the CSS and JS URLs carry a
+    version. Behind a CDN the HTML would otherwise come back fresh while
+    style.css stayed cached for hours - which renders the new markup with the
+    old stylesheet and looks utterly broken rather than merely stale.
+    """
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    v = _asset_version()
+    html = html.replace('href="style.css"', f'href="style.css?v={v}"')
+    html = html.replace('src="app.js"', f'src="app.js?v={v}"')
+    return HTMLResponse(html, headers={
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+    })
+
+
+@app.middleware("http")
+async def asset_cache_headers(request, call_next):
+    resp = await call_next(request)
+    path = request.url.path
+    if path.endswith((".css", ".js")):
+        # Versioned URLs make these safe to cache hard; without the version
+        # they must revalidate.
+        resp.headers["Cache-Control"] = (
+            "public, max-age=31536000, immutable" if request.url.query.startswith("v=")
+            else "no-cache, must-revalidate"
+        )
+    elif path.startswith("/api/"):
+        resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 app.mount("/", StaticFiles(directory=str(STATIC), html=True), name="static")
