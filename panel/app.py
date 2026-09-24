@@ -304,11 +304,44 @@ def list_uploads():
     ]}
 
 
+async def _resolve_modrinth_mc_version(slug: str, version_id: str | None) -> str | None:
+    """Ask Modrinth which Minecraft version this pack targets.
+
+    The UI only knows this once its version dropdown has loaded, so creating
+    quickly left mc_version null - and an unknown version picks the NEWEST
+    Java, which is wrong for a 1.21 pack: Fabric refuses to load with
+    "requires version 21 of OpenJDK ... but 25 is present". Resolving it here
+    means the answer never depends on UI timing.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=20, headers=UA) as c:
+            if version_id:
+                r = await c.get(f"{MODRINTH_API}/version/{version_id}")
+                versions = [r.json()] if r.status_code == 200 else []
+            else:
+                r = await c.get(f"{MODRINTH_API}/project/{slug}/version")
+                versions = r.json() if r.status_code == 200 else []
+        for v in versions:
+            games = v.get("game_versions") or []
+            if games:
+                return games[-1]
+    except Exception:
+        pass
+    return None
+
+
 @app.post("/api/servers")
-def create_server(spec: dict = Body(...)):
+async def create_server(spec: dict = Body(...)):
     if not spec.get("name"):
         raise HTTPException(400, "a name is required")
     spec.setdefault("kind", "vanilla")
+
+    # Pin the Java version to what the pack actually targets, not to whatever
+    # the browser happened to have loaded.
+    if spec["kind"] == "modrinth" and not spec.get("mc_version") and spec.get("modpack"):
+        resolved = await _resolve_modrinth_mc_version(spec["modpack"], spec.get("modpack_version"))
+        if resolved:
+            spec["mc_version"] = resolved
     spec.setdefault("memory_gb", load_settings().get("default_memory_gb", 4))
     if spec["kind"] == "curseforge" and not spec.get("cf_api_key"):
         key = load_settings().get("cf_api_key")
@@ -316,7 +349,9 @@ def create_server(spec: dict = Body(...)):
             raise HTTPException(400, "CurseForge needs an API key - add one in Settings")
         spec["cf_api_key"] = key
     try:
-        meta = S.create_server(spec)
+        # Blocking docker work - keep it off the event loop now that this
+        # endpoint is async.
+        meta = await asyncio.to_thread(S.create_server, spec)
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:

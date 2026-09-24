@@ -600,6 +600,21 @@ async function openCreate() {
   modHits = [];
   $('#modsResults').innerHTML = '';
   const oldPick = $('#mrVersionPick'); if (oldPick) oldPick.remove();
+  // Clear the form too. These persist in the DOM, so the previous world's
+  // MOTD, ops and uploads were silently applied to the next one.
+  ['#optMotd', '#optOps', '#optPort', '#advName', '#advWorld', '#plainName',
+   '#cfName', '#cfUrl', '#cfZipUrl', '#modsName', '#modsQuery', '#mrQuery'
+  ].forEach(sel => { const el = $(sel); if (el) el.value = ''; });
+  state.uploadedPack = null;
+  state.uploadedWorld = null;
+  [['#cfDrop', '#cfDropText', 'Drop the server pack .zip here, or click to choose'],
+   ['#advDrop', '#advDropText', 'Drop the map .zip here, or click to choose']
+  ].forEach(([drop, label, idle]) => {
+    const d = $(drop), l = $(label);
+    if (d) d.classList.remove('has-file', 'over');
+    if (l) l.textContent = idle;
+  });
+
   // Always start a new world on "Install a world" rather than wherever the
   // last one was abandoned.
   $$('#createTabs .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'install'));
