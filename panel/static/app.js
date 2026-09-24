@@ -315,8 +315,7 @@ function renderServers() {
       $$('.start-tile', grid).forEach(t => {
         t.onclick = async () => {
           await openCreate();
-          const tab = $(`#createTabs [data-tab="${t.dataset.start}"]`);
-          if (tab) tab.click();
+          openCreateAt(t.dataset.start);
         };
       });
     }
@@ -511,10 +510,28 @@ wireTabs('#createTabs');
 wireTabs('#detailTabs');
 
 const activeCreateTab = () => $('#createTabs .tab.active').dataset.tab;
+const activeInstallMode = () => ($('#installSeg .seg-btn.active') || {}).dataset?.mode || 'modpack';
+
+// Modpack / adventure / plain live under one "Install a world" tab now, so the
+// rest of the form logic asks for the effective choice rather than the tab.
+function effectiveTab() {
+  const t = activeCreateTab();
+  return t === 'install' ? activeInstallMode() : t;
+}
+
+$('#installSeg').addEventListener('click', e => {
+  const btn = e.target.closest('.seg-btn');
+  if (!btn) return;
+  $$('#installSeg .seg-btn').forEach(b => b.classList.toggle('active', b === btn));
+  $$('#createModal .install-mode').forEach(p =>
+    p.classList.toggle('active', p.dataset.mode === btn.dataset.mode));
+  applyTabMemoryDefault(btn.dataset.mode);
+  updateSummary();
+});
 
 // Modpacks are heavy and a plain world is not, so each tab starts at a sane
 // amount rather than one global default. Stops overriding once you pick a value.
-const TAB_MEMORY = { modpack: 12, curseforge: 12, mods: 8, adventure: 6, plain: 6 };
+const TAB_MEMORY = { modpack: 12, curseforge: 12, mods: 8, adventure: 6, plain: 6, install: 12 };
 let memoryTouched = false;
 $('#optMemory').addEventListener('change', () => { memoryTouched = true; });
 
@@ -575,6 +592,18 @@ function versionWarning(ver) {
 
 async function openCreate() {
   state.pick = null; state.pickVersions = []; state.mrOffset = 0;
+  // The basket used to survive between opens, so a new world silently
+  // inherited the previous one's mods and the tick marks went stale.
+  state.basket.clear();
+  renderBasket();
+  syncAllModTiles();
+  modHits = [];
+  $('#modsResults').innerHTML = '';
+  const oldPick = $('#mrVersionPick'); if (oldPick) oldPick.remove();
+  // Always start a new world on "Install a world" rather than wherever the
+  // last one was abandoned.
+  $$('#createTabs .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'install'));
+  $$('#createModal .tab-panel').forEach(p => p.classList.toggle('active', p.dataset.panel === 'install'));
   subdomainTouched = false;
   $('#optSubdomain').value = '';
   const domain = state.host.router_domain;
@@ -786,7 +815,9 @@ function renderBasket() {
   const box = $('#modsBasket');
   const n = state.basket.size;
   box.hidden = !n;
-  if (!n) return;
+  // Empty it rather than just hiding it, or the previous world's chips sit
+  // in the DOM waiting to reappear.
+  if (!n) { box.innerHTML = ''; return; }
   box.innerHTML = `<div class="basket-head"><b>${n}</b> mod${n > 1 ? 's' : ''} picked
       <button class="btn sm ghost" id="basketClear">Clear</button></div>
     <div class="basket-items">${[...state.basket.values()].map(m => `
@@ -876,7 +907,7 @@ function syncAllModTiles() {
 }
 
 function currentCreateName() {
-  const tab = activeCreateTab();
+  const tab = effectiveTab();
   if (tab === 'modpack') return state.pick ? state.pick.title : '';
   if (tab === 'mods') return $('#modsName').value.trim();
   if (tab === 'adventure') return $('#advName').value.trim();
@@ -885,7 +916,7 @@ function currentCreateName() {
 }
 
 function updateSummary() {
-  const tab = activeCreateTab();
+  const tab = effectiveTab();
   const btn = $('#btnCreate');
   const sum = $('#createSummary');
 
@@ -974,7 +1005,7 @@ function sharedSpec() {
 }
 
 $('#btnCreate').onclick = async () => {
-  const tab = activeCreateTab();
+  const tab = effectiveTab();
   const spec = sharedSpec();
   if (tab === 'modpack' && state.pick?.ftb) {
     Object.assign(spec, {
@@ -1436,9 +1467,20 @@ $('#btnConnectHelp').onclick = () => {
 
 /* ---------- boot ---------- */
 
+// Shortcuts around the page ("Discover modpacks", the banner, the guide cards)
+// still name the old flat tabs. Modpack / adventure / plain are now modes
+// inside "Install a world", so resolve those to tab + segment.
+const INSTALL_MODES = new Set(['modpack', 'adventure', 'plain']);
+
+function openCreateAt(target) {
+  const tab = INSTALL_MODES.has(target) ? 'install' : target;
+  $(`#createTabs [data-tab="${tab}"]`)?.click();
+  if (tab === 'install') $(`#installSeg [data-mode="${target}"]`)?.click();
+}
+
 $$('[data-create-tab]').forEach(btn => btn.addEventListener('click', async () => {
   await openCreate();
-  $(`#createTabs [data-tab="${btn.dataset.createTab}"]`)?.click();
+  openCreateAt(btn.dataset.createTab);
 }));
 $('[data-guide="join"]').onclick = () => $('#btnConnectHelp').click();
 $('[data-guide="backups"]').onclick = () => {

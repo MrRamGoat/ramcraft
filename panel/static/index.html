@@ -145,10 +145,8 @@
     </header>
 
     <nav class="tabs" id="createTabs">
-      <button class="tab active" data-tab="modpack"><svg class="ico"><use href="#i-box"/></svg>Modpacks</button>
-      <button class="tab" data-tab="adventure"><svg class="ico"><use href="#i-map"/></svg>Adventure</button>
-      <button class="tab" data-tab="mods"><svg class="ico"><use href="#i-sliders"/></svg>Pick mods</button>
-      <button class="tab" data-tab="plain"><svg class="ico"><use href="#i-cube"/></svg>Build your own</button>
+      <button class="tab active" data-tab="install"><svg class="ico"><use href="#i-box"/></svg>Install a world</button>
+      <button class="tab" data-tab="mods"><svg class="ico"><use href="#i-pickaxe"/></svg>Build a modpack</button>
       <button class="tab" data-tab="curseforge"><svg class="ico"><use href="#i-flame"/></svg>CurseForge</button>
     </nav>
 
@@ -157,8 +155,20 @@
          the bottom of a short window with no way to scroll down to it. -->
     <div class="modal-scroll">
     <div class="modal-body">
-      <!-- Modrinth browser -->
-      <section class="tab-panel active" data-panel="modpack">
+      <!-- Install a world: the three ready-made routes, one tab, chosen by a
+           segmented control rather than three near-identical top-level tabs. -->
+      <section class="tab-panel active" data-panel="install">
+        <div class="seg" id="installSeg" role="tablist">
+          <button class="seg-btn active" data-mode="modpack" role="tab">
+            <svg class="ico"><use href="#i-box"/></svg>Modpack</button>
+          <button class="seg-btn" data-mode="adventure" role="tab">
+            <svg class="ico"><use href="#i-map"/></svg>Adventure map</button>
+          <button class="seg-btn" data-mode="plain" role="tab">
+            <svg class="ico"><use href="#i-cube"/></svg>Plain world</button>
+        </div>
+
+      <!-- Modrinth / FTB browser -->
+      <div class="install-mode active" data-mode="modpack">
         <div class="search-row">
           <select id="mrSource" title="Where to search">
             <option value="modrinth">Modrinth — 18,000+</option>
@@ -171,10 +181,10 @@
         </div>
         <div class="pack-grid" id="mrResults"></div>
         <div class="pack-more"><button class="btn ghost" id="mrMore" hidden>Load more</button></div>
-      </section>
+      </div>
 
       <!-- Adventure map -->
-      <section class="tab-panel" data-panel="adventure">
+      <div class="install-mode" data-mode="adventure">
         <p class="panel-note">
           Drop in a world <code>.zip</code> from <a href="https://www.planetminecraft.com/projects/"
           target="_blank" rel="noopener">Planet&nbsp;Minecraft</a>,
@@ -211,6 +221,32 @@
           </div>
         </div>
         <p class="hint">Adventure maps are built for one exact version — pick the one the map says.</p>
+      </div>
+
+      <!-- Plain -->
+      <div class="install-mode" data-mode="plain">
+        <div class="field">
+          <label for="plainName">Server name</label>
+          <input id="plainName" placeholder="Survival with the boys">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="plainType">Type</label>
+            <select id="plainType">
+              <option value="paper">Paper — best performance</option>
+              <option value="vanilla">Vanilla — pure Mojang</option>
+              <option value="fabric">Fabric — light mods</option>
+              <option value="forge">Forge — classic mods</option>
+              <option value="neoforge">NeoForge — modern Forge</option>
+              <option value="purpur">Purpur — Paper++</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="plainVersion">Minecraft version</label>
+            <select id="plainVersion"></select>
+          </div>
+        </div>
+      </div>
       </section>
 
       <!-- Build your own pack from individual mods -->
@@ -248,31 +284,6 @@
         </div>
         <div class="pack-grid" id="modsResults"></div>
         <div class="pack-more"><button class="btn ghost" id="modsMore" hidden>Load more</button></div>
-      </section>
-
-      <!-- Plain -->
-      <section class="tab-panel" data-panel="plain">
-        <div class="field">
-          <label for="plainName">Server name</label>
-          <input id="plainName" placeholder="Survival with the boys">
-        </div>
-        <div class="field-row">
-          <div class="field">
-            <label for="plainType">Type</label>
-            <select id="plainType">
-              <option value="paper">Paper — best performance</option>
-              <option value="vanilla">Vanilla — pure Mojang</option>
-              <option value="fabric">Fabric — light mods</option>
-              <option value="forge">Forge — classic mods</option>
-              <option value="neoforge">NeoForge — modern Forge</option>
-              <option value="purpur">Purpur — Paper++</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="plainVersion">Minecraft version</label>
-            <select id="plainVersion"></select>
-          </div>
-        </div>
       </section>
 
       <!-- CurseForge -->

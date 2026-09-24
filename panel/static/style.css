@@ -967,3 +967,34 @@ input::placeholder,textarea::placeholder { color: var(--muted); opacity: 1; }
 .modal-body.detail-body { padding: 0; }
 @media(max-width:760px) { .modal-backdrop { place-items: center; } .modal,.modal.wide { max-height: calc(100dvh - 20px); border: 1px solid var(--border); border-radius: 12px; } }
 @media(max-width:650px) { .adventure-banner::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg,#edf3f5c9,transparent 90%); } .banner-copy { background: none; z-index: 2; } .landscape-caption { z-index: 2; } }
+
+/* ---------- segmented control (Install a world) ---------- */
+
+.seg {
+  display: inline-flex; gap: 3px; margin-bottom: 18px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 11px; padding: 3px;
+}
+.seg-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  font: inherit; font-size: 13.5px; font-weight: 560;
+  color: var(--muted); background: none; border: none; cursor: pointer;
+  padding: 8px 15px; border-radius: 8px;
+  transition: background .15s, color .15s;
+}
+.seg-btn:hover { color: var(--text); }
+.seg-btn.active {
+  background: var(--surface); color: var(--accent-dim);
+  box-shadow: 0 1px 3px #33475a1f, 0 0 0 1px #cfe2f0;
+}
+.seg-btn .ico { font-size: 15px; opacity: .8; }
+.seg-btn.active .ico { opacity: 1; }
+
+.install-mode { display: none; }
+.install-mode.active { display: block; }
+
+@media (max-width: 620px) {
+  .seg { display: flex; width: 100%; }
+  .seg-btn { flex: 1; justify-content: center; padding: 8px 6px; font-size: 12.5px; }
+  .seg-btn .ico { display: none; }
+}
