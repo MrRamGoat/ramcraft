@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RamCraft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%235ac45a'/><rect x='18' y='18' width='28' height='28' fill='%23103a10'/><rect x='54' y='18' width='28' height='28' fill='%23103a10'/><rect x='18' y='58' width='64' height='24' fill='%23103a10'/></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo-mark" aria-hidden="true"></span>
+    <div>
+      <h1>RamCraft</h1>
+      <p class="tagline">Minecraft hosting, one click</p>
+    </div>
+  </div>
+  <div class="host-stats" id="hostStats"></div>
+  <div class="topbar-actions">
+    <button class="btn ghost" id="btnConnectHelp" title="How players join">How to join</button>
+    <button class="btn ghost" id="btnSettings" title="Settings">Settings</button>
+    <button class="btn primary" id="btnNew">+ New server</button>
+  </div>
+</header>
+
+<main id="grid" class="grid">
+  <div class="loading-state">Loading servers…</div>
+</main>
+
+<!-- ============ CREATE ============ -->
+<div class="modal-backdrop" id="createModal" hidden>
+  <div class="modal wide">
+    <header class="modal-head">
+      <h2>New server</h2>
+      <button class="icon-btn" data-close>&times;</button>
+    </header>
+
+    <nav class="tabs" id="createTabs">
+      <button class="tab active" data-tab="modpack">Modpacks</button>
+      <button class="tab" data-tab="adventure">Adventure map</button>
+      <button class="tab" data-tab="plain">Plain server</button>
+      <button class="tab" data-tab="curseforge">CurseForge</button>
+    </nav>
+
+    <div class="modal-body">
+      <!-- Modrinth browser -->
+      <section class="tab-panel active" data-panel="modpack">
+        <div class="search-row">
+          <input type="search" id="mrQuery" placeholder="Search modpacks — try 'create', 'skyblock', 'better mc'…" autocomplete="off">
+          <select id="mrVersionFilter" title="Filter by Minecraft version">
+            <option value="">Any MC version</option>
+          </select>
+        </div>
+        <div class="pack-grid" id="mrResults"></div>
+        <div class="pack-more"><button class="btn ghost" id="mrMore" hidden>Load more</button></div>
+      </section>
+
+      <!-- Adventure map -->
+      <section class="tab-panel" data-panel="adventure">
+        <p class="panel-note">
+          Paste a direct link to a world <code>.zip</code> (from Planet Minecraft, MinecraftMaps,
+          a Drive direct link, anything). RamCraft downloads it, unpacks it as the world and
+          boots a server on the matching version.
+        </p>
+        <div class="field">
+          <label for="advName">Server name</label>
+          <input id="advName" placeholder="The Dropper">
+        </div>
+        <div class="field">
+          <label for="advWorld">World .zip URL</label>
+          <input id="advWorld" placeholder="https://…/the-dropper.zip">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="advType">Server type</label>
+            <select id="advType">
+              <option value="paper">Paper (fast, plugin-ready)</option>
+              <option value="vanilla">Vanilla</option>
+              <option value="fabric">Fabric</option>
+              <option value="forge">Forge</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="advVersion">Minecraft version</label>
+            <select id="advVersion"></select>
+          </div>
+        </div>
+        <p class="hint">Adventure maps are built for one exact version — pick the one the map says.</p>
+      </section>
+
+      <!-- Plain -->
+      <section class="tab-panel" data-panel="plain">
+        <div class="field">
+          <label for="plainName">Server name</label>
+          <input id="plainName" placeholder="Survival with the boys">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="plainType">Type</label>
+            <select id="plainType">
+              <option value="paper">Paper — best performance</option>
+              <option value="vanilla">Vanilla — pure Mojang</option>
+              <option value="fabric">Fabric — light mods</option>
+              <option value="forge">Forge — classic mods</option>
+              <option value="neoforge">NeoForge — modern Forge</option>
+              <option value="purpur">Purpur — Paper++</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="plainVersion">Minecraft version</label>
+            <select id="plainVersion"></select>
+          </div>
+        </div>
+      </section>
+
+      <!-- CurseForge -->
+      <section class="tab-panel" data-panel="curseforge">
+        <p class="panel-note">
+          CurseForge-only packs (All the Mods, RLCraft, DawnCraft…) can be installed
+          <b>without an API key</b> — download the pack's <b>Server Pack</b> zip from its
+          Files tab in your browser and drop it here. The key is only needed if you want
+          RamCraft to fetch packs by URL automatically.
+        </p>
+        <div class="field">
+          <label for="cfName">Server name</label>
+          <input id="cfName" placeholder="All the Mods 10">
+        </div>
+
+        <div class="field">
+          <label>Server pack zip — no API key needed</label>
+          <div class="pack-drop" id="cfDrop">
+            <input type="file" id="cfFile" accept=".zip" hidden>
+            <span id="cfDropText">Drop the server pack .zip here, or click to choose</span>
+          </div>
+          <input id="cfZipUrl" placeholder="…or paste a direct link to the server pack .zip" style="margin-top:9px">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="cfPackVersion">Minecraft version of the pack</label>
+            <select id="cfPackVersion"></select>
+            <p class="hint">Shown on the pack's Files page. This picks the right Java.</p>
+          </div>
+        </div>
+
+        <details class="advanced">
+          <summary>Or fetch by URL using an API key</summary>
+          <p class="panel-note" id="cfKeyNote" style="margin-top:12px"></p>
+          <div class="field">
+            <label for="cfUrl">CurseForge modpack page URL</label>
+            <input id="cfUrl" placeholder="https://www.curseforge.com/minecraft/modpacks/all-the-mods-10">
+          </div>
+        </details>
+      </section>
+    </div>
+
+    <!-- shared options -->
+    <div class="shared-options">
+      <div class="field addr-field">
+        <label for="optSubdomain">Join address</label>
+        <div class="addr-compose">
+          <input id="optSubdomain" placeholder="server-name" autocomplete="off" spellcheck="false">
+          <span class="domain-suffix" id="domainSuffix">.mc.ramflix.xyz</span>
+        </div>
+        <p class="hint">Filled in from the server name. This is the whole address players
+          type — no port, and it starts working the moment the server does.</p>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="optMemory">Memory</label>
+          <select id="optMemory">
+            <option value="2">2 GB — vanilla / small</option>
+            <option value="4" selected>4 GB — light mods</option>
+            <option value="6">6 GB — most modpacks</option>
+            <option value="8">8 GB — heavy modpacks</option>
+            <option value="10">10 GB — very heavy</option>
+            <option value="12">12 GB — kitchen sink</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="optPlayers">Max players</label>
+          <input id="optPlayers" type="number" min="1" max="200" value="10">
+        </div>
+        <div class="field">
+          <label for="optDifficulty">Difficulty</label>
+          <select id="optDifficulty">
+            <option value="peaceful">Peaceful</option>
+            <option value="easy">Easy</option>
+            <option value="normal" selected>Normal</option>
+            <option value="hard">Hard</option>
+          </select>
+        </div>
+      </div>
+      <details class="advanced">
+        <summary>More options</summary>
+        <div class="field-row">
+          <div class="field">
+            <label for="optGamemode">Game mode</label>
+            <select id="optGamemode">
+              <option value="survival" selected>Survival</option>
+              <option value="creative">Creative</option>
+              <option value="adventure">Adventure</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="optView">View distance</label>
+            <input id="optView" type="number" min="4" max="32" value="10">
+          </div>
+          <div class="field">
+            <label for="optSim">Simulation distance</label>
+            <input id="optSim" type="number" min="3" max="32" value="6">
+            <p class="hint">Chunks the server actually ticks. Keep it below view
+              distance — it is the biggest performance lever there is.</p>
+          </div>
+          <div class="field">
+            <label for="optPort">Port</label>
+            <input id="optPort" type="number" placeholder="auto">
+          </div>
+        </div>
+        <div class="field">
+          <label for="optOps">Operators (comma separated usernames)</label>
+          <input id="optOps" placeholder="RamGoat, friend1">
+        </div>
+        <div class="field">
+          <label for="optMotd">MOTD</label>
+          <input id="optMotd" placeholder="Shown in the server list">
+        </div>
+        <label class="check"><input type="checkbox" id="optOnline" checked> Require genuine Minecraft accounts (online mode)</label>
+      </details>
+    </div>
+
+    <footer class="modal-foot">
+      <div class="create-summary" id="createSummary">Pick a modpack to begin</div>
+      <div class="foot-actions">
+        <button class="btn ghost" data-close>Cancel</button>
+        <button class="btn primary" id="btnCreate" disabled>Create &amp; start</button>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<!-- ============ SERVER DETAIL ============ -->
+<div class="modal-backdrop" id="detailModal" hidden>
+  <div class="modal wide">
+    <header class="modal-head">
+      <h2 id="detailTitle">Server</h2>
+      <button class="icon-btn" data-close>&times;</button>
+    </header>
+    <nav class="tabs" id="detailTabs">
+      <button class="tab active" data-tab="console">Console</button>
+      <button class="tab" data-tab="config">Settings</button>
+      <button class="tab" data-tab="backups">Backups</button>
+    </nav>
+    <div class="modal-body detail-body">
+      <section class="tab-panel active" data-panel="console">
+        <div class="console" id="console"></div>
+        <form class="console-input" id="cmdForm">
+          <span class="prompt">/</span>
+          <input id="cmdInput" placeholder="say hello   ·   op RamGoat   ·   weather clear" autocomplete="off" spellcheck="false">
+          <button class="btn primary sm" type="submit">Run</button>
+        </form>
+      </section>
+
+      <section class="tab-panel" data-panel="config">
+        <div id="configForm"></div>
+      </section>
+
+      <section class="tab-panel" data-panel="backups">
+        <div class="backup-head">
+          <p class="panel-note">Backups capture the worlds plus ops/whitelist/properties — not the mods, which RamCraft can always re-download.</p>
+          <button class="btn primary sm" id="btnBackupNow">Back up now</button>
+        </div>
+        <div id="backupList"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SETTINGS ============ -->
+<div class="modal-backdrop" id="settingsModal" hidden>
+  <div class="modal">
+    <header class="modal-head">
+      <h2>Settings</h2>
+      <button class="icon-btn" data-close>&times;</button>
+    </header>
+    <div class="modal-body">
+      <div class="field">
+        <label for="setCf">CurseForge API key</label>
+        <input id="setCf" type="password" placeholder="Leave blank to keep the stored key">
+        <p class="hint">Needed only for CurseForge packs. Free key from
+          <a href="https://console.curseforge.com/" target="_blank" rel="noopener">console.curseforge.com</a>.
+          Modrinth packs need nothing.</p>
+      </div>
+      <div class="field">
+        <label>Server domain</label>
+        <div class="addr"><span class="a" id="setDomain">—</span></div>
+        <p class="hint">Every server is published as
+          <b style="font-family:var(--mono)">name.<span id="setDomainEcho"></span></b>.
+          Change it in <code>docker-compose.yml</code> (<code>RAMCRAFT_ROUTER_DOMAIN</code>)
+          if you ever move domains.</p>
+      </div>
+      <div class="field">
+        <label>Routing</label>
+        <div id="setRoutes" class="route-list"></div>
+      </div>
+      <div class="field">
+        <label>Storage</label>
+        <p class="hint" id="setStorage">Checking…</p>
+        <button class="btn sm" id="btnCleanup" style="margin-top:8px">Clean up leftovers</button>
+      </div>
+      <div class="field">
+        <label for="setMem">Default memory for new servers (GB)</label>
+        <input id="setMem" type="number" min="1" max="24" value="4">
+      </div>
+    </div>
+    <footer class="modal-foot">
+      <div></div>
+      <div class="foot-actions">
+        <button class="btn ghost" data-close>Cancel</button>
+        <button class="btn primary" id="btnSaveSettings">Save</button>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<!-- ============ HOW TO JOIN ============ -->
+<div class="modal-backdrop" id="joinModal" hidden>
+  <div class="modal">
+    <header class="modal-head">
+      <h2>How players join</h2>
+      <button class="icon-btn" data-close>&times;</button>
+    </header>
+    <div class="modal-body" id="joinBody"></div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toasts"></div>
+<script src="app.js"></script>
+</body>
+</html>

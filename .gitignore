@@ -1,0 +1,16 @@
+# Runtime state lives on the server under /srv/mc, never in the repo:
+#   <id>/ramcraft.json      per-server metadata incl. its RCON password
+#   _ramcraft-settings.json the CurseForge API key
+#   _backups/ _uploads/     worlds and uploaded server packs
+# Nothing of that is checked in. These patterns are belt-and-braces.
+_backups/
+_uploads/
+*.tar.gz
+ramcraft.json
+_ramcraft-settings.json
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.DS_Store
