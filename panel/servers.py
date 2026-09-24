@@ -43,16 +43,29 @@ def slugify(name: str) -> str:
     return slug[:40] or f"server-{secrets.token_hex(3)}"
 
 
+# The newest JVM tag itzg publishes. Minecraft moved to a year-based scheme
+# (26.x), and those releases need a newer JVM than any 1.x ever did.
+NEWEST_JAVA = "java25"
+
+
 def pick_image(mc_version: str | None, override: str | None = None) -> str:
     """The itzg image cannot switch JVMs at runtime, so the tag has to match
-    the Minecraft version or old modpacks fail to boot."""
+    the Minecraft version or the server dies with UnsupportedClassVersionError
+    (too old) or old modpacks fail to boot (too new)."""
     if override:
         return f"itzg/minecraft-server:{override}"
-    if not mc_version:
-        return "itzg/minecraft-server:java21"
-    m = re.match(r"1\.(\d+)(?:\.(\d+))?", str(mc_version))
+
+    v = str(mc_version or "").strip()
+    # No version means LATEST, and latest Minecraft needs the latest JVM -
+    # defaulting these to an older "safe looking" tag is what broke booting.
+    if not v or v.upper() == "LATEST":
+        return f"itzg/minecraft-server:{NEWEST_JAVA}"
+
+    m = re.match(r"1\.(\d+)(?:\.(\d+))?", v)
     if not m:
-        return "itzg/minecraft-server:java21"
+        # Year-based scheme (26.x and up): newer than every 1.x release.
+        return f"itzg/minecraft-server:{NEWEST_JAVA}"
+
     minor, patch = int(m.group(1)), int(m.group(2) or 0)
     if minor <= 16:
         return "itzg/minecraft-server:java8"

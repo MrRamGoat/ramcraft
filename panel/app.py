@@ -463,16 +463,31 @@ async def server_stream(sid: str):
     async def gen():
         loop = asyncio.get_running_loop()
         stream = await loop.run_in_executor(None, S.log_stream, sid)
+        buf = b""
         try:
             while True:
                 chunk = await loop.run_in_executor(None, next, stream, None)
                 if chunk is None:
                     break
-                text = chunk.decode("utf-8", errors="replace").rstrip("\n")
-                for line in text.split("\n"):
-                    yield "data: " + line + "\n\n"
+                # Docker hands back arbitrarily sized chunks - with a TTY that
+                # can be a SINGLE BYTE. Emitting each chunk as its own event
+                # made the browser render one line per character, so hold a
+                # buffer and only emit once a full line has actually arrived.
+                buf += chunk
+                # Progress spinners use a bare \r with no \n; treat it as a
+                # line end too, or the buffer never flushes while one runs.
+                buf = buf.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+                while b"\n" in buf:
+                    raw, buf = buf.split(b"\n", 1)
+                    yield "data: " + raw.decode("utf-8", errors="replace") + "\n\n"
+                # A pathological line with no newline must not grow forever.
+                if len(buf) > 16384:
+                    yield "data: " + buf.decode("utf-8", errors="replace") + "\n\n"
+                    buf = b""
         except Exception:
             pass
+        if buf.strip():
+            yield "data: " + buf.decode("utf-8", errors="replace") + "\n\n"
         yield "event: end\ndata: closed\n\n"
 
     return StreamingResponse(
