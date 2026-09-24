@@ -335,9 +335,10 @@ function renderServers() {
 
 async function refresh(withPlayers = true) {
   try {
-    const [srv, host] = await Promise.all([api('/servers'), api('/host')]);
-    state.servers = srv.servers;
-    state.host = host;
+    // One request, not two: each round trip through the tunnel costs 150-300ms.
+    const d = await api('/dashboard');
+    state.servers = d.servers;
+    state.host = d.host;
     renderHost();
     renderServers();
     if (withPlayers) {
@@ -1320,5 +1321,15 @@ $('#btnConnectHelp').onclick = () => {
 /* ---------- boot ---------- */
 
 refresh();
-setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 5000);
+// Nothing running means nothing changes, so poll lazily; speed up only when
+// something is live or mid-transition. Saves a tunnel round trip every 5s.
+setInterval(() => {
+  if (document.visibilityState !== 'visible') return;
+  const busy = state.busy.size ||
+    state.servers.some(s => ['online', 'starting', 'unhealthy'].includes(s.status.state));
+  if (busy || Date.now() - (state.lastPoll || 0) > 15000) {
+    state.lastPoll = Date.now();
+    refresh();
+  }
+}, 5000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(); });

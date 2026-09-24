@@ -1,17 +1,14 @@
 :root {
-  /* Cloud + beige: a warm off-white page, soft blue sky behind it, and a
-     blue accent. Deliberately never pure #fff - flat white glares and makes
-     the cards impossible to separate from the page. */
-  --bg: #f3eee3;
-  --bg-grad:
-    radial-gradient(1100px 560px at 12% -12%, #bcdcf255 0%, transparent 62%),
-    radial-gradient(900px 520px at 92% -4%, #cfe6f866 0%, transparent 58%),
-    radial-gradient(760px 700px at 50% 118%, #e8dcc633 0%, transparent 62%);
-  --surface: #fffdf7;
-  --surface-2: #f3eee2;
-  --surface-3: #e9e2d2;
-  --border: #ded5c2;
-  --border-soft: #e9e2d3;
+  /* White page with a cool cloud wash. One gradient, not three, and NOT
+     background-attachment: fixed - fixed layers repaint on every scroll frame
+     and were a real part of why this felt sluggish. */
+  --bg: #f6f8fb;
+  --bg-grad: linear-gradient(180deg, #e9f2fa 0%, #f6f8fb 420px);
+  --surface: #ffffff;
+  --surface-2: #f1f5f9;
+  --surface-3: #e5ecf2;
+  --border: #d5dfe8;
+  --border-soft: #e4ebf1;
   --text: #2b3742;
   --muted: #64717d;
   --faint: #929fab;
@@ -43,7 +40,7 @@ body {
   display: flex; flex-direction: column;
   background: var(--bg);
   background-image: var(--bg-grad);
-  background-attachment: fixed;
+  background-repeat: no-repeat;
   color: var(--text);
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 16px;
@@ -163,7 +160,7 @@ a { color: var(--accent-dim); }
   white-space: nowrap;
   box-shadow: 0 1px 2px #33475a14;
 }
-.btn:hover:not(:disabled) { background: #fffefb; border-color: #c9bfa9; }
+.btn:hover:not(:disabled) { background: #ffffff; border-color: #b9cbda; }
 .btn:active:not(:disabled) { transform: translateY(1px); }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 
@@ -222,7 +219,7 @@ a { color: var(--accent-dim); }
 .empty-art {
   width: 108px; height: 108px; margin: 0 auto 26px;
   display: grid; place-items: center; border-radius: 30px;
-  background: radial-gradient(circle at 50% 28%, #3f96cf2e, transparent 70%), #fffdf7;
+  background: radial-gradient(circle at 50% 28%, #3f96cf2e, transparent 70%), #ffffff;
   border: 1px solid var(--border);
   color: var(--accent);
   box-shadow: 0 18px 40px -18px #33475a4d;
@@ -232,7 +229,7 @@ a { color: var(--accent-dim); }
 
 .card {
   position: relative;
-  background: linear-gradient(180deg, #fffefa, #fbf7ee);
+  background: linear-gradient(180deg, #ffffff, #fbfdff);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   padding: 22px 21px 20px;
@@ -261,7 +258,7 @@ a { color: var(--accent-dim); }
 }
 .card.is-crashed, .card.is-unhealthy { border-color: #e6bdb9; }
 
-.card:hover { border-color: #cdc2ab; transform: translateY(-2px); box-shadow: 0 16px 34px -14px #33475a45; }
+.card:hover { border-color: #bfd2e1; transform: translateY(-2px); box-shadow: 0 16px 34px -14px #33475a45; }
 .card.is-online:hover { border-color: #93cba6; }
 
 .card-head { display: flex; gap: 12px; align-items: flex-start; }
@@ -348,7 +345,7 @@ a { color: var(--accent-dim); }
   align-items: center; justify-content: center; gap: 10px;
   border-style: dashed; border-color: var(--border); cursor: pointer;
   min-height: 210px; color: var(--muted); text-align: center;
-  background: #fffdf799; box-shadow: none;
+  background: #ffffff99; box-shadow: none;
 }
 .card.add::before { display: none; }
 .card.add:hover { border-color: var(--accent); color: var(--text); background: #f0f8fd; }
@@ -400,13 +397,13 @@ a { color: var(--accent-dim); }
 
 .modal-foot {
   display: flex; align-items: center; justify-content: space-between; gap: 14px;
-  padding: 15px 20px; border-top: 1px solid var(--border-soft); background: #faf6ed;
+  padding: 15px 20px; border-top: 1px solid var(--border-soft); background: #f4f8fc;
 }
 .foot-actions { display: flex; gap: 9px; }
 .create-summary { font-size: 12.5px; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .create-summary b { color: var(--text); }
 
-.tabs { display: flex; gap: 2px; padding: 0 14px; border-bottom: 1px solid var(--border-soft); background: #faf6ed; }
+.tabs { display: flex; gap: 2px; padding: 0 14px; border-bottom: 1px solid var(--border-soft); background: #f4f8fc; }
 .tab {
   display: inline-flex; align-items: center;
   background: none; border: none; color: var(--muted); font: inherit;
@@ -427,7 +424,7 @@ a { color: var(--accent-dim); }
 
 input:not([type=checkbox]):not([type=radio]), select, textarea {
   width: 100%; font: inherit; font-size: 13.5px;
-  background: #fffefb; color: var(--text);
+  background: #ffffff; color: var(--text);
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   padding: 9px 11px; outline: none; transition: border-color .15s, box-shadow .15s;
 }
@@ -452,8 +449,8 @@ input::placeholder { color: #a9b4bf; }
 /* Pinned above the footer so it is always reachable, but capped so opening
    "More options" scrolls here instead of pushing MOTD off the screen. */
 .shared-options {
-  padding: 16px 20px; border-top: 1px solid var(--border-soft); background: #faf6ed;
-  flex: 0 1 auto; max-height: 46vh; overflow-y: auto;
+  padding: 16px 20px; border-top: 1px solid var(--border-soft); background: #f4f8fc;
+  flex: none; max-height: 46vh; overflow-y: auto;
 }
 .advanced { margin-top: 12px; }
 .advanced summary { cursor: pointer; font-size: 12.5px; color: var(--muted); font-weight: 600; user-select: none; padding: 4px 0; }
@@ -463,7 +460,7 @@ input::placeholder { color: #a9b4bf; }
 .addr-compose {
   display: flex; align-items: stretch;
   border: 1px solid var(--border); border-radius: var(--radius-sm);
-  background: #fffefb; overflow: hidden;
+  background: #ffffff; overflow: hidden;
   transition: border-color .15s, box-shadow .15s;
 }
 .addr-compose:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
@@ -543,7 +540,7 @@ input::placeholder { color: #a9b4bf; }
 .console .sys { color: #7cc4ec; }
 .console .me { color: #d2a8ff; }
 
-.console-input { display: flex; align-items: center; gap: 9px; padding: 12px 16px; background: #faf6ed; }
+.console-input { display: flex; align-items: center; gap: 9px; padding: 12px 16px; background: #f4f8fc; }
 .console-input .prompt { font-family: var(--mono); color: var(--accent-dim); font-size: 14px; }
 .console-input input { flex: 1; font-family: var(--mono); font-size: 12.5px; }
 
@@ -657,7 +654,7 @@ input::placeholder { color: #a9b4bf; }
 .start-tile {
   display: flex; flex-direction: column; align-items: flex-start; gap: 7px;
   text-align: left; font: inherit; color: inherit; cursor: pointer;
-  background: linear-gradient(180deg, #fffefa, #fbf7ee);
+  background: linear-gradient(180deg, #ffffff, #fbfdff);
   border: 1px solid var(--border-soft); border-radius: var(--radius);
   padding: 20px 18px; box-shadow: var(--shadow);
   transition: border-color .16s, transform .16s, box-shadow .16s;
@@ -740,3 +737,29 @@ svg use[href="#i-pickaxe"], svg use[href="#i-chest"], svg use[href="#i-tnt"] {
 
 .grid.is-empty { align-content: center; padding-top: 16px; padding-bottom: 16px; }
 .grid.is-empty .empty-state { min-height: 0; }
+
+/* ---------- menus: tinted, not plain white ---------- */
+
+/* On a white page a white dialog has no edge, so these get a blue border,
+   a tinted head/foot and a deeper shadow to lift them off the page. */
+.modal {
+  border: 1px solid #b9d5ea;
+  box-shadow: 0 30px 70px -20px #1e3a5273, 0 0 0 1px #ffffff inset;
+}
+.modal-head {
+  background: linear-gradient(180deg, #eef6fc, #e7f1f9);
+  border-bottom: 1px solid #cfe2f0;
+}
+.modal-foot {
+  background: linear-gradient(180deg, #f2f8fc, #eaf3fa);
+  border-top: 1px solid #cfe2f0;
+}
+.tabs { background: #f5fafd; border-bottom: 1px solid #d9e7f2; }
+.shared-options { background: #f5fafd; border-top: 1px solid #d9e7f2; }
+.console-input { background: #f2f8fc; }
+.modal-backdrop { background: #1e3a5259; }
+
+/* Cards keep a hairline blue edge so they read against the white page. */
+.card { background: #fff; }
+.start-tile { background: #fff; }
+.foot-card .f-ico svg { shape-rendering: crispEdges; }

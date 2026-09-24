@@ -205,6 +205,17 @@ def list_servers():
     return {"servers": [_server_payload(sid) for sid in S.all_ids()]}
 
 
+@app.get("/api/dashboard")
+def dashboard():
+    """Everything the main view polls, in ONE request.
+
+    Through the Cloudflare tunnel each round trip costs 150-300 ms, so firing
+    /servers and /host separately every few seconds made the whole panel feel
+    sluggish for no reason - the work is trivial, the latency was the cost.
+    """
+    return {"servers": [_server_payload(sid) for sid in S.all_ids()], "host": host_info()}
+
+
 @app.get("/api/servers/{sid}")
 def get_server(sid: str):
     payload = _server_payload(sid)
