@@ -306,6 +306,16 @@ def build_env(spec: dict, rcon_password: str) -> dict:
         env["FTB_MODPACK_ID"] = str(spec["ftb_id"])
         if spec.get("ftb_version_id"):
             env["FTB_MODPACK_VERSION_ID"] = str(spec["ftb_version_id"])
+    elif kind == "custom":
+        # A pack the user assembled themselves: a plain loader plus a list of
+        # Modrinth project slugs. The image resolves each to the right file for
+        # this MC version and loader, and pulls required dependencies too.
+        env["TYPE"] = BASE_TYPES.get(spec.get("loader", "fabric"), "FABRIC")
+        env["VERSION"] = spec.get("mc_version") or "LATEST"
+        env["MODRINTH_PROJECTS"] = ",".join(spec.get("mods") or [])
+        env["MODRINTH_DOWNLOAD_DEPENDENCIES"] = "required"
+        # Client-only mods in the list would otherwise abort the whole install.
+        env["MODRINTH_ALLOWED_VERSION_TYPE"] = spec.get("channel", "release")
     else:
         env["TYPE"] = BASE_TYPES.get(kind, "VANILLA")
         env["VERSION"] = spec.get("mc_version") or "LATEST"

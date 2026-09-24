@@ -77,9 +77,15 @@ function copy(text, label) {
   }
 }
 
+// "Asleep / Wake" rather than "Stopped / Start" because that is literally what
+// happens now: mc-router starts a stopped server when someone tries to join.
 const STATE_LABEL = {
-  online: 'Online', starting: 'Starting', stopped: 'Stopped',
-  crashed: 'Crashed', unhealthy: 'Unhealthy', missing: 'Not built',
+  online: 'Live', starting: 'Waking', stopped: 'Asleep',
+  crashed: 'Crashed', unhealthy: 'Struggling', missing: 'Not built',
+};
+const STATE_ICON = {
+  online: 'i-bolt', starting: 'i-restart', stopped: 'i-moon',
+  crashed: 'i-alert', unhealthy: 'i-alert', missing: 'i-cube',
 };
 
 const KIND_LABEL = {
@@ -99,17 +105,17 @@ function renderHost() {
     ? Math.round(((h.disk_total_gb - h.disk_free_gb) / h.disk_total_gb) * 100) : 0;
   $('#hostStats').innerHTML = `
     <div class="hstat">
-      <span class="k">Servers</span>
-      <span class="v">${h.running} / ${h.servers} up</span>
+      <span class="k"><svg class="ico"><use href="#i-server"/></svg>Worlds</span>
+      <span class="v">${h.running} <i>live of</i> ${h.servers}</span>
     </div>
     <div class="hstat" title="RAM handed to running servers, against this machine's budget">
-      <span class="k">RAM committed</span>
-      <span class="v">${(h.mem_used_mb / 1024).toFixed(0)} / ${(h.mem_total_mb / 1024).toFixed(0)} GB</span>
+      <span class="k"><svg class="ico"><use href="#i-chip"/></svg>Memory</span>
+      <span class="v">${(h.mem_used_mb / 1024).toFixed(0)} <i>of</i> ${(h.mem_total_mb / 1024).toFixed(0)} GB</span>
       <span class="bar"><span class="${meterClass(memPct)}" style="width:${memPct}%"></span></span>
     </div>
     <div class="hstat">
-      <span class="k">Disk free</span>
-      <span class="v">${h.disk_free_gb} GB</span>
+      <span class="k"><svg class="ico"><use href="#i-disk"/></svg>Storage</span>
+      <span class="v">${h.disk_free_gb} GB <i>free</i></span>
       <span class="bar"><span class="${meterClass(diskUsedPct)}" style="width:${diskUsedPct}%"></span></span>
     </div>`;
 }
@@ -125,7 +131,9 @@ const CARD_TEMPLATE = `
       <h3 data-f="name"></h3>
       <p class="card-sub" data-f="sub"></p>
     </div>
-    <span class="state" data-f="state"><span class="dot"></span><span data-f="stateText"></span></span>
+    <span class="state" data-f="state">
+      <svg class="ico" data-f="stateIcon"><use data-f="stateUse" href="#i-moon"/></svg><span data-f="stateText"></span>
+    </span>
   </div>
   <div class="meters" data-f="meters">
     <div class="meter">
@@ -140,25 +148,25 @@ const CARD_TEMPLATE = `
     </div>
   </div>
   <div class="players-row" data-f="players">
-    <span>👤</span><b data-f="playerCount"></b>
+    <svg class="ico"><use href="#i-users"/></svg><b data-f="playerCount"></b>
     <span class="names" data-f="playerNames"></span>
   </div>
   <div class="addr">
+    <svg class="ico dim"><use href="#i-link"/></svg>
     <span class="a" data-f="addr"></span>
-    <span class="pill" data-f="pill" title="Also answers on the bare domain">default</span>
+    <span class="pill" data-f="pill" title="Also answers on the bare domain">main</span>
     <button data-f="copy">Copy</button>
   </div>
   <div class="card-actions">
-    <button class="btn primary" data-act="start" data-f="btnStart"><span class="spinner" data-f="spinStart" hidden></span>Start</button>
-    <button class="btn danger" data-act="stop" data-f="btnStop"><span class="spinner" data-f="spinStop" hidden></span>Stop</button>
-    <button class="btn narrow" data-act="restart" data-f="btnRestart" title="Restart">↻</button>
-    <button class="btn" data-act="open">Manage</button>
-    <button class="btn narrow danger" data-act="delete" title="Delete this server" aria-label="Delete server">
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>
-      </svg>
-    </button>
+    <button class="btn primary" data-act="start" data-f="btnStart">
+      <span class="spinner" data-f="spinStart" hidden></span><svg class="ico" data-f="startIcon"><use href="#i-play"/></svg><span data-f="startText">Wake</span></button>
+    <button class="btn danger" data-act="stop" data-f="btnStop">
+      <span class="spinner" data-f="spinStop" hidden></span><svg class="ico"><use href="#i-stop"/></svg>Stop</button>
+    <button class="btn narrow" data-act="restart" data-f="btnRestart" title="Restart" aria-label="Restart">
+      <svg class="ico"><use href="#i-restart"/></svg></button>
+    <button class="btn" data-act="open"><svg class="ico"><use href="#i-sliders"/></svg>Manage</button>
+    <button class="btn narrow danger" data-act="delete" title="Delete this world" aria-label="Delete world">
+      <svg class="ico"><use href="#i-trash"/></svg></button>
   </div>`;
 
 function buildCard(s) {
@@ -201,6 +209,7 @@ function patchCard(el, s) {
 
   f.state.className = 'state ' + st;
   f.stateText.textContent = STATE_LABEL[st] || st;
+  f.stateUse.setAttribute('href', '#' + (STATE_ICON[st] || 'i-cube'));
   // The card itself carries the state so CSS can tint its edge and accent bar.
   el.className = 'card is-' + st;
 
@@ -230,6 +239,8 @@ function patchCard(el, s) {
 
   f.btnStart.hidden = running;
   f.btnStop.hidden = !running;
+  // A crashed server needs restarting, not waking - say which.
+  f.startText.textContent = st === 'crashed' ? 'Retry' : st === 'missing' ? 'Build' : 'Wake';
   f.btnStart.disabled = busy;
   f.btnStop.disabled = busy;
   f.btnRestart.disabled = busy || !running;
@@ -243,7 +254,8 @@ function addCardElement() {
     el = document.createElement('div');
     el.className = 'card add';
     el.id = 'addCard';
-    el.innerHTML = `<span class="plus">+</span><strong>New server</strong>
+    el.innerHTML = `<span class="plus"><svg class="ico"><use href="#i-plus"/></svg></span>
+      <strong>New world</strong>
       <span style="font-size:12.5px">Modpack, adventure map or vanilla</span>`;
     el.onclick = openCreate;
   }
@@ -257,10 +269,12 @@ function renderServers() {
     if (!$('.empty-state', grid)) {
       grid.innerHTML = `
         <div class="empty-state">
-          <h3>No servers yet</h3>
-          <p>Pick a modpack, drop in an adventure map, or spin up plain vanilla.
-             RamCraft downloads everything and boots it for you.</p>
-          <button class="btn primary" id="emptyCreate">+ Create your first server</button>
+          <div class="empty-art"><svg class="ico"><use href="#i-box"/></svg></div>
+          <h3>Nothing running yet</h3>
+          <p>Pick a modpack, drop in an adventure map, or build a plain world.
+             RamCraft fetches everything, boots it, and hands you an address.</p>
+          <button class="btn primary" id="emptyCreate">
+            <svg class="ico"><use href="#i-plus"/></svg>Create your first world</button>
         </div>`;
       $('#emptyCreate').onclick = openCreate;
     }
@@ -382,13 +396,31 @@ function wireTabs(navSel) {
     const root = tab.closest('.modal');
     $$('.tab', tab.parentElement).forEach(t => t.classList.toggle('active', t === tab));
     $$('.tab-panel', root).forEach(p => p.classList.toggle('active', p.dataset.panel === tab.dataset.tab));
-    if (navSel === '#createTabs') updateSummary();
+    if (navSel === '#createTabs') {
+      applyTabMemoryDefault(tab.dataset.tab);
+      // The mods grid is populated on demand: without this the tab opens empty
+      // even though thousands of mods match, because nothing had fired a search.
+      if (tab.dataset.tab === 'mods' && !modHits.length) { state.modsOffset = 0; searchMods(true); }
+      updateSummary();
+    }
   });
 }
 wireTabs('#createTabs');
 wireTabs('#detailTabs');
 
 const activeCreateTab = () => $('#createTabs .tab.active').dataset.tab;
+
+// Modpacks are heavy and a plain world is not, so each tab starts at a sane
+// amount rather than one global default. Stops overriding once you pick a value.
+const TAB_MEMORY = { modpack: 12, curseforge: 12, mods: 8, adventure: 6, plain: 6 };
+let memoryTouched = false;
+$('#optMemory').addEventListener('change', () => { memoryTouched = true; });
+
+function applyTabMemoryDefault(tab) {
+  if (memoryTouched) return;
+  const want = String(TAB_MEMORY[tab] || 6);
+  if ([...$('#optMemory').options].some(o => o.value === want)) $('#optMemory').value = want;
+}
 
 /* ---------- create ---------- */
 
@@ -421,6 +453,8 @@ async function loadMcVersions() {
     $('#advVersion').value = v.latest;
     $('#cfPackVersion').innerHTML = opts;
     $('#cfPackVersion').value = v.latest;
+    $('#modsVersion').innerHTML = opts;
+    $('#modsVersion').value = v.latest;
     $('#mrVersionFilter').innerHTML = '<option value="">Any MC version</option>' +
       v.releases.slice(0, 30).map(r => `<option value="${r}">${r}</option>`).join('');
   } catch { /* offline - the field just stays empty */ }
@@ -446,8 +480,9 @@ async function openCreate() {
   $('.addr-field').hidden = !domain;
   openModal('#createModal');
   loadMcVersions();
+  memoryTouched = false;
+  applyTabMemoryDefault(activeCreateTab());
   const s = await api('/settings').catch(() => ({}));
-  $('#optMemory').value = String(s.default_memory_gb || 4);
   $('#cfKeyNote').innerHTML = s.cf_api_key_set
     ? 'CurseForge API key is set. Paste any modpack page URL below.'
     : '<strong>No CurseForge API key yet.</strong> Add one under Settings — CurseForge requires it. Modrinth packs (first tab) need nothing.';
@@ -596,9 +631,108 @@ wireDrop({
   onDone: d => { state.uploadedWorld = d; },
 });
 
+/* ---------- pick-your-own-mods ---------- */
+
+state.basket = new Map();   // slug -> {slug, title, icon}
+state.modsOffset = 0;
+
+function renderBasket() {
+  const box = $('#modsBasket');
+  const n = state.basket.size;
+  box.hidden = !n;
+  if (!n) return;
+  box.innerHTML = `<div class="basket-head"><b>${n}</b> mod${n > 1 ? 's' : ''} picked
+      <button class="btn sm ghost" id="basketClear">Clear</button></div>
+    <div class="basket-items">${[...state.basket.values()].map(m => `
+      <span class="chip" data-slug="${esc(m.slug)}">
+        ${m.icon ? `<img src="${esc(m.icon)}" alt="">` : ''}${esc(m.title)}
+        <button aria-label="Remove">&times;</button>
+      </span>`).join('')}</div>`;
+  $('#basketClear').onclick = () => { state.basket.clear(); renderBasket(); syncAllModTiles(); updateSummary(); };
+}
+
+$('#modsBasket').addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if (chip && e.target.tagName === 'BUTTON') {
+    state.basket.delete(chip.dataset.slug);
+    renderBasket(); syncAllModTiles(); updateSummary();
+  }
+});
+
+let modHits = [];
+function renderModHits() {
+  $('#modsResults').innerHTML = modHits.map(h => {
+    const picked = state.basket.has(h.slug);
+    const clientOnly = h.server_side === 'unsupported';
+    return `
+      <button class="pack ${picked ? 'selected' : ''}" data-slug="${esc(h.slug)}"
+              data-title="${esc(h.title)}" data-icon="${esc(h.icon || '')}">
+        ${h.icon ? `<img src="${esc(h.icon)}" alt="" loading="lazy">` : '<div class="ph"></div>'}
+        <div class="info">
+          <div class="name">${esc(h.title)}${picked ? ' ✓' : ''}</div>
+          <div class="desc">${esc(h.description)}</div>
+          <div class="dl">${nfmt(h.downloads)} downloads${clientOnly ? ' · client-side only' : ''}</div>
+        </div>
+      </button>`;
+  }).join('') || '<div class="list-empty">Nothing matched that search.</div>';
+}
+
+let modsTimer;
+$('#modsQuery').addEventListener('input', () => {
+  clearTimeout(modsTimer);
+  modsTimer = setTimeout(() => { state.modsOffset = 0; searchMods(true); }, 320);
+});
+$('#modsLoader').addEventListener('change', () => { state.modsOffset = 0; searchMods(true); updateSummary(); });
+$('#modsVersion').addEventListener('change', () => { state.modsOffset = 0; searchMods(true); updateSummary(); });
+$('#modsName').addEventListener('input', updateSummary);
+$('#modsMore').onclick = () => { state.modsOffset += 24; searchMods(false); };
+
+async function searchMods(reset) {
+  const q = $('#modsQuery').value.trim();
+  const v = $('#modsVersion').value;
+  const l = $('#modsLoader').value;
+  const box = $('#modsResults');
+  if (reset) box.innerHTML = '<div class="list-empty"><span class="spinner"></span> Searching mods…</div>';
+  try {
+    const r = await api(`/search/mods?q=${encodeURIComponent(q)}&offset=${state.modsOffset}` +
+                        `&version=${encodeURIComponent(v)}&loader=${encodeURIComponent(l)}&limit=24`);
+    modHits = reset ? r.hits : modHits.concat(r.hits);
+    renderModHits();
+    $('#modsMore').hidden = r.hits.length < 24;
+  } catch (e) {
+    box.innerHTML = `<div class="list-empty">Could not reach Modrinth — ${esc(e.message)}</div>`;
+  }
+}
+
+$('#modsResults').addEventListener('click', e => {
+  const el = e.target.closest('.pack');
+  if (!el) return;
+  const slug = el.dataset.slug;
+  if (state.basket.has(slug)) state.basket.delete(slug);
+  else state.basket.set(slug, { slug, title: el.dataset.title, icon: el.dataset.icon });
+  // Toggle this one tile in place. Re-rendering the whole grid would detach
+  // every other tile mid-click, so rapid picks land on dead nodes.
+  syncModTile(el, state.basket.has(slug));
+  renderBasket(); updateSummary();
+});
+
+function syncModTile(el, picked) {
+  el.classList.toggle('selected', picked);
+  const name = el.querySelector('.name');
+  const base = el.dataset.title;
+  if (name) name.textContent = picked ? base + ' ✓' : base;
+}
+
+// Keep tiles in sync when the basket is changed from outside the grid
+// (a chip's × or Clear), without rebuilding it.
+function syncAllModTiles() {
+  $$('#modsResults .pack').forEach(el => syncModTile(el, state.basket.has(el.dataset.slug)));
+}
+
 function currentCreateName() {
   const tab = activeCreateTab();
   if (tab === 'modpack') return state.pick ? state.pick.title : '';
+  if (tab === 'mods') return $('#modsName').value.trim();
   if (tab === 'adventure') return $('#advName').value.trim();
   if (tab === 'plain') return $('#plainName').value.trim();
   return $('#cfName').value.trim();
@@ -618,6 +752,12 @@ function updateSummary() {
       text = `<b>${esc(state.pick.title)}</b>${v ? ' · ' + esc(v.version_number) + ' · MC ' + esc(v.game_versions[0] || '?') : ''}`;
       ok = true;
     } else text = 'Pick a modpack to begin';
+  } else if (tab === 'mods') {
+    const n = state.basket.size;
+    ok = !!($('#modsName').value.trim() && n);
+    text = ok
+      ? `<b>${esc($('#modsName').value.trim())}</b> · ${n} mod${n > 1 ? 's' : ''} · ${esc($('#modsLoader').value)} ${esc($('#modsVersion').value)}`
+      : (n ? 'Give the server a name' : 'Pick at least one mod');
   } else if (tab === 'adventure') {
     const typed = $('#advWorld').value.trim();
     const world = state.uploadedWorld ? state.uploadedWorld.name : typed;
@@ -656,7 +796,7 @@ function updateSummary() {
   sum.innerHTML = text;
   btn.disabled = !ok || (!!domain && !sub);
 }
-['#advName', '#advWorld', '#advType', '#advVersion', '#plainName', '#plainType', '#cfZipUrl', '#cfPackVersion',
+['#advName', '#advWorld', '#advType', '#advVersion', '#plainName', '#plainType', '#cfZipUrl', '#cfPackVersion', '#modsName',
  '#plainVersion', '#cfName', '#cfUrl'].forEach(sel =>
   $(sel).addEventListener('input', updateSummary));
 ['#advType', '#advVersion', '#plainType', '#plainVersion'].forEach(sel =>
@@ -697,6 +837,15 @@ $('#btnCreate').onclick = async () => {
       source_label: 'Modrinth: ' + state.pick.slug,
     });
     if (v) { spec.modpack_version = v.id; spec.mc_version = v.game_versions[0]; }
+  } else if (tab === 'mods') {
+    Object.assign(spec, {
+      kind: 'custom',
+      name: $('#modsName').value.trim(),
+      loader: $('#modsLoader').value,
+      mc_version: $('#modsVersion').value,
+      mods: [...state.basket.keys()],
+      source_label: `${state.basket.size} hand-picked mods`,
+    });
   } else if (tab === 'adventure') {
     Object.assign(spec, {
       kind: $('#advType').value,
@@ -873,6 +1022,15 @@ async function renderConfig(id) {
         The last is the direct LAN address. Disk used: ${(s.disk_mb / 1024).toFixed(1)} GB ·
         Created ${esc((s.created || '').slice(0, 10))}</p>
     </div>
+    ${(sp.mods && sp.mods.length) ? `
+    <div class="field">
+      <label>Client pack</label>
+      <p class="hint" style="margin:0 0 9px">This world runs ${sp.mods.length} hand-picked mods.
+        Download the pack and open it in the <b>Modrinth app</b> (or Prism, ATLauncher, MultiMC)
+        and your client will match the server exactly — same mods, same versions.</p>
+      <a class="btn primary sm" href="/api/servers/${id}/mrpack" download>
+        <svg class="ico"><use href="#i-archive"/></svg>Download .mrpack</a>
+    </div>` : ''}
     ${dom ? `
     <div class="field">
       <label for="cfgSub">Server address</label>

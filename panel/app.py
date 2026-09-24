@@ -9,9 +9,10 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, HTTPException, Body, UploadFile, File
-from fastapi.responses import StreamingResponse, FileResponse, PlainTextResponse
+from fastapi.responses import StreamingResponse, FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+import mrpack
 import rcon
 import servers as S
 
@@ -118,6 +119,40 @@ async def modrinth_versions(slug: str):
             "date": v.get("date_published"),
         })
     return {"versions": out}
+
+
+@app.get("/api/search/mods")
+async def search_mods(q: str = "", limit: int = 24, offset: int = 0,
+                      version: str = "", loader: str = ""):
+    """Individual mods, not modpacks - the building blocks for a custom pack."""
+    facets = [["project_type:mod"]]
+    if version:
+        facets.append(["versions:" + version])
+    if loader:
+        facets.append(["categories:" + loader])
+    params = {
+        "query": q,
+        "limit": min(limit, 60),
+        "offset": offset,
+        "index": "relevance" if q else "downloads",
+        "facets": json.dumps(facets),
+    }
+    async with httpx.AsyncClient(timeout=20, headers=UA) as c:
+        r = await c.get(MODRINTH_API + "/search", params=params)
+        r.raise_for_status()
+        data = r.json()
+    return {"hits": [{
+        "slug": h["slug"],
+        "title": h["title"],
+        "description": h.get("description", ""),
+        "icon": h.get("icon_url"),
+        "downloads": h.get("downloads", 0),
+        "categories": h.get("categories", []),
+        # server_side "unsupported" means it is a client-only mod and putting it
+        # on the server does nothing - worth showing.
+        "server_side": h.get("server_side"),
+        "client_side": h.get("client_side"),
+    } for h in data.get("hits", [])], "total": data.get("total_hits", 0)}
 
 
 @app.get("/api/versions/minecraft")
@@ -478,6 +513,33 @@ async def players(sid: str):
 
 
 # --- backups ---------------------------------------------------------------
+
+@app.get("/api/servers/{sid}/mrpack")
+async def client_pack(sid: str):
+    """A .mrpack of this server's mods, so a player's client matches it.
+    Opens directly in the Modrinth app, PrismLauncher, ATLauncher, MultiMC."""
+    meta = S.load_meta(sid)
+    if not meta:
+        raise HTTPException(404, "unknown server")
+    spec = meta.get("spec") or {}
+    mods = spec.get("mods") or []
+    if not mods:
+        raise HTTPException(400, "this server was not built from a hand-picked mod list")
+
+    data, report = await mrpack.build(
+        meta["name"], meta.get("mc_version") or spec.get("mc_version") or "",
+        spec.get("loader", "fabric"), mods,
+    )
+    return Response(
+        content=data,
+        media_type="application/x-modrinth-modpack+zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{sid}.mrpack"',
+            "X-Pack-Included": str(report["included"]),
+            "X-Pack-Skipped": str(len(report["skipped"])),
+        },
+    )
+
 
 @app.get("/api/servers/{sid}/backups")
 def server_backups(sid: str):

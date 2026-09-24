@@ -12,6 +12,35 @@
 </head>
 <body>
 
+<!-- Icon sprite. Inline so there is no extra request and icons inherit
+     currentColor; referenced everywhere as <svg class="ico"><use href="#i-x"/></svg>. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="i-restart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M9 3L3 6v15l6-3 6 3 6-3V3l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/></symbol>
+  <symbol id="i-cube" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 4v16"/></symbol>
+  <symbol id="i-flame" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3s5 4.5 5 9a5 5 0 0 1-10 0c0-1.7.8-3.2 1.7-4.3C9.4 9 12 7 12 3z"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></symbol>
+  <symbol id="i-chip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/></symbol>
+  <symbol id="i-disk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3.5"/><path d="M22 20v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.6a4 4 0 0 1 0 7"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.6 6.6 0 0 0 10.5 10.5z"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3l9.5 17h-19z"/><path d="M12 9v5M12 17.5h.01"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.2 2.4c-.6.2-.7.7-.7 1.3"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-broom" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4l6 6"/><path d="M8.5 9.5l6 6"/><path d="M13 10l-7 7-2 4 4-2 7-7"/></symbol>
+</defs></svg>
+
 <header class="topbar">
   <div class="brand">
     <span class="logo-mark" aria-hidden="true"></span>
@@ -22,9 +51,12 @@
   </div>
   <div class="host-stats" id="hostStats"></div>
   <div class="topbar-actions">
-    <button class="btn ghost" id="btnConnectHelp" title="How players join">How to join</button>
-    <button class="btn ghost" id="btnSettings" title="Settings">Settings</button>
-    <button class="btn primary" id="btnNew">+ New server</button>
+    <button class="btn ghost" id="btnConnectHelp" title="How players join">
+      <svg class="ico"><use href="#i-help"/></svg>How to join</button>
+    <button class="btn ghost" id="btnSettings" title="Settings">
+      <svg class="ico"><use href="#i-sliders"/></svg>Settings</button>
+    <button class="btn primary" id="btnNew">
+      <svg class="ico"><use href="#i-plus"/></svg>New world</button>
   </div>
 </header>
 
@@ -36,17 +68,22 @@
 <div class="modal-backdrop" id="createModal" hidden>
   <div class="modal wide">
     <header class="modal-head">
-      <h2>New server</h2>
+      <h2><svg class="ico"><use href="#i-plus"/></svg>New world</h2>
       <button class="icon-btn" data-close>&times;</button>
     </header>
 
     <nav class="tabs" id="createTabs">
-      <button class="tab active" data-tab="modpack">Modpacks</button>
-      <button class="tab" data-tab="adventure">Adventure map</button>
-      <button class="tab" data-tab="plain">Plain server</button>
-      <button class="tab" data-tab="curseforge">CurseForge</button>
+      <button class="tab active" data-tab="modpack"><svg class="ico"><use href="#i-box"/></svg>Modpacks</button>
+      <button class="tab" data-tab="adventure"><svg class="ico"><use href="#i-map"/></svg>Adventure</button>
+      <button class="tab" data-tab="mods"><svg class="ico"><use href="#i-sliders"/></svg>Pick mods</button>
+      <button class="tab" data-tab="plain"><svg class="ico"><use href="#i-cube"/></svg>Build your own</button>
+      <button class="tab" data-tab="curseforge"><svg class="ico"><use href="#i-flame"/></svg>CurseForge</button>
     </nav>
 
+    <!-- One scroll region for the panels AND the shared options below them.
+         With the options outside it, opening "More options" pushed MOTD past
+         the bottom of a short window with no way to scroll down to it. -->
+    <div class="modal-scroll">
     <div class="modal-body">
       <!-- Modrinth browser -->
       <section class="tab-panel active" data-panel="modpack">
@@ -78,7 +115,7 @@
           <label>World .zip</label>
           <div class="pack-drop" id="advDrop">
             <input type="file" id="advFile" accept=".zip" hidden>
-            <span id="advDropText">Drop the map .zip here, or click to choose</span>
+            <svg class="ico drop-ico"><use href="#i-upload"/></svg><span id="advDropText">Drop the map .zip here, or click to choose</span>
           </div>
           <input id="advWorld" placeholder="…or paste a direct link to the .zip" style="margin-top:9px">
         </div>
@@ -98,6 +135,43 @@
           </div>
         </div>
         <p class="hint">Adventure maps are built for one exact version — pick the one the map says.</p>
+      </section>
+
+      <!-- Build your own pack from individual mods -->
+      <section class="tab-panel" data-panel="mods">
+        <p class="panel-note">
+          Assemble your own pack. Pick the loader and version, add mods, and RamCraft
+          installs them plus their dependencies. When it's running you can download a
+          <b>.mrpack</b> from Manage that opens straight in the Modrinth app — so your
+          client matches the server exactly, with no hunting for the same files.
+        </p>
+        <div class="field">
+          <label for="modsName">Server name</label>
+          <input id="modsName" placeholder="Our modded world">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="modsLoader">Mod loader</label>
+            <select id="modsLoader">
+              <option value="fabric">Fabric — lightest, most mods</option>
+              <option value="neoforge">NeoForge — modern Forge</option>
+              <option value="forge">Forge — classic</option>
+              <option value="quilt">Quilt</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="modsVersion">Minecraft version</label>
+            <select id="modsVersion"></select>
+          </div>
+        </div>
+
+        <div class="basket" id="modsBasket" hidden></div>
+
+        <div class="search-row">
+          <input type="search" id="modsQuery" placeholder="Search mods — 'sodium', 'create', 'jei'…" autocomplete="off">
+        </div>
+        <div class="pack-grid" id="modsResults"></div>
+        <div class="pack-more"><button class="btn ghost" id="modsMore" hidden>Load more</button></div>
       </section>
 
       <!-- Plain -->
@@ -142,7 +216,7 @@
           <label>Server pack zip — no API key needed</label>
           <div class="pack-drop" id="cfDrop">
             <input type="file" id="cfFile" accept=".zip" hidden>
-            <span id="cfDropText">Drop the server pack .zip here, or click to choose</span>
+            <svg class="ico drop-ico"><use href="#i-upload"/></svg><span id="cfDropText">Drop the server pack .zip here, or click to choose</span>
           </div>
           <input id="cfZipUrl" placeholder="…or paste a direct link to the server pack .zip" style="margin-top:9px">
         </div>
@@ -165,7 +239,11 @@
       </section>
     </div>
 
-    <!-- shared options -->
+    </div><!-- /.modal-scroll -->
+
+    <!-- Deliberately OUTSIDE the scroll region: these apply to every tab and
+         must stay in view. Burying them under a long modpack grid meant you
+         had to scroll past 24 packs to set the memory. -->
     <div class="shared-options">
       <div class="field addr-field">
         <label for="optSubdomain">Join address</label>
@@ -254,13 +332,13 @@
 <div class="modal-backdrop" id="detailModal" hidden>
   <div class="modal wide">
     <header class="modal-head">
-      <h2 id="detailTitle">Server</h2>
+      <h2 id="detailTitle"><svg class="ico"><use href="#i-server"/></svg>Server</h2>
       <button class="icon-btn" data-close>&times;</button>
     </header>
     <nav class="tabs" id="detailTabs">
-      <button class="tab active" data-tab="console">Console</button>
-      <button class="tab" data-tab="config">Settings</button>
-      <button class="tab" data-tab="backups">Backups</button>
+      <button class="tab active" data-tab="console"><svg class="ico"><use href="#i-terminal"/></svg>Console</button>
+      <button class="tab" data-tab="config"><svg class="ico"><use href="#i-sliders"/></svg>Settings</button>
+      <button class="tab" data-tab="backups"><svg class="ico"><use href="#i-archive"/></svg>Snapshots</button>
     </nav>
     <div class="modal-body detail-body">
       <section class="tab-panel active" data-panel="console">
@@ -279,7 +357,7 @@
       <section class="tab-panel" data-panel="backups">
         <div class="backup-head">
           <p class="panel-note">Backups capture the worlds plus ops/whitelist/properties — not the mods, which RamCraft can always re-download.</p>
-          <button class="btn primary sm" id="btnBackupNow">Back up now</button>
+          <button class="btn primary sm" id="btnBackupNow"><svg class="ico"><use href="#i-archive"/></svg>Take snapshot</button>
         </div>
         <div id="backupList"></div>
       </section>
@@ -291,7 +369,7 @@
 <div class="modal-backdrop" id="settingsModal" hidden>
   <div class="modal">
     <header class="modal-head">
-      <h2>Settings</h2>
+      <h2><svg class="ico"><use href="#i-sliders"/></svg>Settings</h2>
       <button class="icon-btn" data-close>&times;</button>
     </header>
     <div class="modal-body">
@@ -317,7 +395,7 @@
       <div class="field">
         <label>Storage</label>
         <p class="hint" id="setStorage">Checking…</p>
-        <button class="btn sm" id="btnCleanup" style="margin-top:8px">Clean up leftovers</button>
+        <button class="btn sm" id="btnCleanup" style="margin-top:8px"><svg class="ico"><use href="#i-broom"/></svg>Clean up leftovers</button>
       </div>
       <div class="field">
         <label for="setMem">Default memory for new servers (GB)</label>
@@ -338,7 +416,7 @@
 <div class="modal-backdrop" id="joinModal" hidden>
   <div class="modal">
     <header class="modal-head">
-      <h2>How players join</h2>
+      <h2><svg class="ico"><use href="#i-link"/></svg>How players join</h2>
       <button class="icon-btn" data-close>&times;</button>
     </header>
     <div class="modal-body" id="joinBody"></div>

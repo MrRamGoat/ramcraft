@@ -31,6 +31,8 @@ Docker daemon.
 - **Adventure maps** — drop in a world `.zip` (or a direct link); it is unpacked as the world
   and served on whichever server type/version you choose.
 - **CurseForge packs with no API key** — upload the pack's **Server Pack** zip.
+- **Pick mods** — build your own pack from individual Modrinth mods, then download a
+  **`.mrpack`** so the client matches the server exactly (see below).
 - **Plain servers** — Vanilla, Paper, Purpur, Fabric, Forge, NeoForge, Quilt, Spigot.
 - **Start / Stop / Restart** per server from the card.
 - **Console** with live log streaming and a command box (over RCON).
@@ -109,9 +111,18 @@ plain `--force-recreate` would silently keep running the old code.
 - **CSS attribute selectors miss bare `<input>`.** A selector list of `input[type=text]`,
   `input[type=search]` … silently leaves `<input id="x">` (no `type`) on the browser's default
   white background. The rule matches `input:not([type=checkbox]):not([type=radio])` now.
-- **Never rebuild the card grid with `innerHTML` on a timer.** The 5 s poll destroyed whatever
-  button the cursor was over, so a click landing in that window hit a detached node and did
-  nothing — it read as "the UI is stuck". Cards are built once and patched in place.
+- **Never rebuild a list with `innerHTML` while people are clicking it.** The 5 s poll destroyed
+  whatever button the cursor was over, so a click landing in that window hit a detached node and
+  did nothing — it read as "the UI is stuck". Cards are built once and patched in place. The
+  same bug bit the mod picker: re-rendering the grid on each pick meant rapid multi-select lost
+  every click after the first, so tiles toggle in place too (`syncModTile`).
+- **Syntax-check the frontend before deploying**: `node --check panel/static/app.js`. A stray
+  edit once left `.value = v.latest;` with its `$(...)` eaten, and the resulting SyntaxError
+  killed the entire script — the page still rendered, so it looked like a styling problem.
+- **Look at the page, not just the DOM.** Probing with JS said the create modal was fine; a
+  screenshot showed the shared Memory/Difficulty controls had been pushed 316px below the fold
+  under a 24-item modpack grid. `.shared-options` is pinned outside the scroll region for that
+  reason, with its own `max-height` so "More options" still scrolls.
 - **Appending log lines one at a time froze the tab for ~29 s.** Each `appendLog` read
   `scrollHeight` and wrote `scrollTop`, forcing a reflow per line; 250 + streamed lines on a
   growing console blocked the main thread. Lines are buffered and flushed in one batch with a
@@ -251,6 +262,26 @@ refuses any adventure-map URL that is not a direct `.zip` and tells you to uploa
 
 Sources that work: Planet Minecraft, MinecraftMaps, CurseForge Worlds (all download-then-upload).
 Modrinth hosts no maps. Neither Modrinth nor FTB carries All the Mods — it is CurseForge-only.
+
+## Build your own pack, and matching clients to it
+
+The **Pick mods** tab searches individual Modrinth mods (filtered by loader and version),
+collects them in a basket, and creates a server with `MODRINTH_PROJECTS`, which resolves each
+slug and pulls required dependencies.
+
+A hand-picked server is useless unless players run the same mods, so `panel/mrpack.py` builds a
+**`.mrpack`** from the same list — `GET /api/servers/<id>/mrpack`, surfaced as a download in
+Manage → Settings. It opens directly in the Modrinth app, PrismLauncher, ATLauncher or MultiMC
+and installs exactly those files.
+
+- The index lists each file's CDN url and sha1/sha512, so the launcher downloads from Modrinth
+  itself: nothing is mirrored here and mod authors keep their download counts.
+- Loader versions are resolved live — Fabric/Quilt from `meta.fabricmc.net`, NeoForge from its
+  maven metadata, matched to the MC version's `<minor>.<patch>.` prefix.
+- Mods with no build for the chosen loader/version are reported in the response rather than
+  silently dropped (`X-Pack-Included` / `X-Pack-Skipped` headers).
+- The index calls loaders `fabric-loader` / `quilt-loader` / `neoforge` / `forge`, which are
+  **not** the names used everywhere else — see `LOADER_KEY`.
 
 ## Network isolation (DMZ)
 
