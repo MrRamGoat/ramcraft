@@ -998,3 +998,42 @@ input::placeholder,textarea::placeholder { color: var(--muted); opacity: 1; }
   .seg-btn { flex: 1; justify-content: center; padding: 8px 6px; font-size: 12.5px; }
   .seg-btn .ico { display: none; }
 }
+
+/* ---------- CurseForge browsing ---------- */
+
+.search-row.sub-filters { margin-top: -6px; align-items: center; }
+.result-count { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+/* The chosen pack and its version, pinned to the top of the scroll region so
+   picking a version never means scrolling back past the grid. */
+.pick-bar {
+  position: sticky; top: 0; z-index: 3;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin: 0 0 14px; padding: 10px 12px;
+  background: #eaf4fb; border: 1px solid var(--accent); border-radius: var(--radius-sm);
+  box-shadow: 0 8px 18px -12px #33475a88;
+}
+.pick-bar > img, .pick-bar > .ph {
+  width: 40px; height: 40px; border-radius: 8px; flex: none; object-fit: cover;
+  background: var(--surface-3); border: 1px solid var(--border);
+}
+.pick-main { min-width: 0; flex: 1 1 220px; }
+.pick-main b { display: block; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pick-sub { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.pick-version { flex: 0 1 340px; min-width: 210px; }
+.pick-version label { display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+.pick-version select { width: 100%; }
+.pick-bar .panel-note { flex: 1 1 100%; margin: 0; }
+.pick-bar .panel-note .btn { margin-top: 8px; }
+
+.pack .tag {
+  display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 4px;
+  font-size: 10px; font-weight: 600; letter-spacing: .2px; vertical-align: 1px;
+  background: #fbeccd; color: #7a4f05;
+}
+.pack.blocked img { filter: grayscale(.6); opacity: .75; }
+
+@media (max-width: 760px) {
+  .result-count { margin-left: 0; }
+  .pick-version { flex-basis: 100%; }
+}

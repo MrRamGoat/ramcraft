@@ -12,6 +12,8 @@ from pathlib import Path
 import docker
 from docker.errors import NotFound
 
+import settings
+
 DATA_ROOT = Path(os.environ.get("RAMCRAFT_DATA", "/srv/mc"))
 BACKUP_ROOT = DATA_ROOT / "_backups"
 UPLOAD_ROOT = DATA_ROOT / "_uploads"
@@ -292,7 +294,12 @@ def build_env(spec: dict, rcon_password: str) -> dict:
         env["MODRINTH_DOWNLOAD_DEPENDENCIES"] = "required"
     elif kind == "curseforge":
         env["TYPE"] = "AUTO_CURSEFORGE"
-        env["CF_API_KEY"] = spec["cf_api_key"]
+        # Read fresh every time rather than from the spec: the key is never
+        # stored in a world's metadata, so a rebuild (memory change, a wake
+        # after the container was removed) used to die on a missing key.
+        env["CF_API_KEY"] = spec.get("cf_api_key") or settings.cf_api_key()
+        if not env["CF_API_KEY"]:
+            raise ValueError("CurseForge needs an API key - add it under Settings")
         if spec.get("cf_page_url"):
             env["CF_PAGE_URL"] = spec["cf_page_url"]
         elif spec.get("cf_slug"):
@@ -351,6 +358,10 @@ def build_env(spec: dict, rcon_password: str) -> dict:
     # as a random crash. Vanilla keeps its watchdog; it is a real signal there.
     if kind in ("modrinth", "curseforge", "serverpack", "ftb", "forge", "neoforge", "fabric", "quilt"):
         env["MAX_TICK_TIME"] = "-1"
+    # Jetpacks, wings and flight rings are standard modpack kit, and vanilla's
+    # anti-fly check kicks anyone who uses them.
+    if kind in ("modrinth", "curseforge", "serverpack", "ftb", "custom"):
+        env["ALLOW_FLIGHT"] = "TRUE"
 
     if spec.get("extra_env"):
         env.update(spec["extra_env"])

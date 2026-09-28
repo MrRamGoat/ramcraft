@@ -18,9 +18,11 @@ from fastapi.responses import (StreamingResponse, FileResponse, PlainTextRespons
 from fastapi.staticfiles import StaticFiles
 
 import auth
+import curseforge as CF
 import mrpack
 import rcon
 import servers as S
+import settings
 
 # The API schema sits under /api/ so the sign-in covers it like everything else.
 app = FastAPI(title="RamCraft", docs_url="/api/docs", redoc_url=None,
@@ -28,7 +30,6 @@ app = FastAPI(title="RamCraft", docs_url="/api/docs", redoc_url=None,
 STATIC = Path(__file__).parent / "static"
 # uvicorn's own logger is the one already wired to stdout (docker logs).
 log = logging.getLogger("uvicorn.error")
-SETTINGS_FILE = S.DATA_ROOT / "_ramcraft-settings.json"
 
 MODRINTH_API = "https://api.modrinth.com/v2"
 MOJANG_MANIFEST = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
@@ -171,18 +172,8 @@ async def change_password(request: Request, body: dict = Body(...)):
 
 # --- settings --------------------------------------------------------------
 
-def load_settings() -> dict:
-    if SETTINGS_FILE.exists():
-        try:
-            return json.loads(SETTINGS_FILE.read_text())
-        except Exception:
-            pass
-    return {"cf_api_key": "", "default_memory_gb": 4}
-
-
-def save_settings(data: dict):
-    SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SETTINGS_FILE.write_text(json.dumps(data, indent=2))
+load_settings = settings.load
+save_settings = settings.save
 
 
 @app.get("/api/settings")
@@ -196,14 +187,24 @@ def get_settings():
 
 
 @app.put("/api/settings")
-def put_settings(body: dict = Body(...)):
+async def put_settings(body: dict = Body(...)):
     s = load_settings()
     for key in ("default_memory_gb",):
         if key in body:
             s[key] = body[key]
     # An empty string means "leave the stored key alone", not "erase it".
     if body.get("cf_api_key"):
-        s["cf_api_key"] = str(body["cf_api_key"]).strip()
+        key = str(body["cf_api_key"]).strip()
+        # Test it before storing it. A wrong key saved silently only surfaces
+        # later, as every CurseForge install failing with a 403 - which is
+        # exactly how the first key went wrong.
+        try:
+            ok = await CF.check_key(key)
+        except CF.CurseForgeError as e:
+            raise HTTPException(502, f"Could not check the key: {e}")
+        if not ok:
+            raise HTTPException(400, CF.KEY_REJECTED)
+        s["cf_api_key"] = key
     if body.get("clear_cf_api_key"):
         s["cf_api_key"] = ""
     save_settings(s)
@@ -310,6 +311,37 @@ async def search_ftb(q: str = ""):
     hits = [p for p in _ftb_cache["packs"]
             if not ql or ql in p["title"].lower() or ql in p["description"].lower()]
     return {"hits": hits, "total": len(hits)}
+
+
+def _cf_http(e: "CF.CurseForgeError") -> HTTPException:
+    return HTTPException(e.status, str(e))
+
+
+@app.get("/api/search/curseforge")
+async def search_curseforge(q: str = "", kind: str = "modpack", version: str = "", loader: str = "",
+                            category: int = 0, sort: str = "popular", offset: int = 0, limit: int = 24):
+    """CurseForge modpacks or worlds. Proxied rather than called from the page
+    so the API key never leaves this machine."""
+    try:
+        return await CF.search(kind, q.strip(), version, loader, category, sort, offset, limit)
+    except CF.CurseForgeError as e:
+        raise _cf_http(e)
+
+
+@app.get("/api/curseforge/categories")
+async def curseforge_categories(kind: str = "modpack"):
+    try:
+        return {"categories": await CF.categories(kind)}
+    except CF.CurseForgeError as e:
+        raise _cf_http(e)
+
+
+@app.get("/api/curseforge/{mod_id}/files")
+async def curseforge_files(mod_id: int):
+    try:
+        return {"files": await CF.files(mod_id)}
+    except CF.CurseForgeError as e:
+        raise _cf_http(e)
 
 
 @app.get("/api/search/mods")
@@ -471,6 +503,49 @@ async def _resolve_modrinth_mc_version(slug: str, version_id: str | None) -> str
     return None
 
 
+async def _resolve_curseforge_pack(spec: dict):
+    """Fill in what the image needs from a picked CurseForge pack.
+
+    The Minecraft version comes from the pack file itself, never the browser:
+    it decides the Java image, and a guess there is how a 1.21 pack ends up
+    booting on the wrong JVM.
+    """
+    proj, f = await CF.resolve(spec["cf_mod_id"], spec.get("cf_file_id"))
+    if not (proj["auto"] and f["auto"]):
+        raise CF.CurseForgeError(
+            409, f"The author of {proj['title']} does not allow automatic downloads. Download "
+                 "its Server Pack from CurseForge and upload it under Upload a pack instead.")
+    spec.update({
+        "cf_slug": proj["slug"],
+        "cf_file_id": f["id"],
+        "cf_file_name": f["name"],
+        "cf_url": proj["url"],
+        "mc_version": f["mc"] or spec.get("mc_version"),
+        "loader": f["loader"],
+    })
+    if not spec.get("icon"):
+        spec["icon"] = proj["icon"]
+    spec.setdefault("source_label", f"CurseForge: {proj['title']} {f['name']}")
+
+
+async def _resolve_curseforge_world(spec: dict):
+    """A CurseForge world becomes a plain WORLD download - with the API key
+    the files come off CurseForge's CDN, which, unlike the map sites, does
+    not block a server fetching them."""
+    proj, f = await CF.resolve(spec["cf_world_id"], spec.get("cf_world_file_id"), kind="world")
+    if not (proj["auto"] and f["auto"]):
+        raise CF.CurseForgeError(
+            409, f"The author of {proj['title']} does not allow automatic downloads. Download "
+                 "the map from CurseForge and drop the .zip in instead.")
+    spec["world_url"] = f["download_url"]
+    spec["cf_world_file_id"] = f["id"]
+    if not spec.get("mc_version") and f["mc"]:
+        spec["mc_version"] = f["mc"]
+    if not spec.get("icon"):
+        spec["icon"] = proj["icon"]
+    spec.setdefault("source_label", f"CurseForge world: {proj['title']}")
+
+
 @app.post("/api/servers")
 async def create_server(spec: dict = Body(...)):
     if not spec.get("name"):
@@ -484,11 +559,18 @@ async def create_server(spec: dict = Body(...)):
         if resolved:
             spec["mc_version"] = resolved
     spec.setdefault("memory_gb", load_settings().get("default_memory_gb", 4))
-    if spec["kind"] == "curseforge" and not spec.get("cf_api_key"):
-        key = load_settings().get("cf_api_key")
-        if not key:
-            raise HTTPException(400, "CurseForge needs an API key - add one in Settings")
-        spec["cf_api_key"] = key
+    if spec["kind"] == "curseforge" and not settings.cf_api_key():
+        raise HTTPException(400, "CurseForge needs an API key - add one in Settings")
+    # The key is read from Settings whenever the container is built; it must
+    # never ride along in the spec, which is saved beside the world.
+    spec.pop("cf_api_key", None)
+    try:
+        if spec["kind"] == "curseforge" and spec.get("cf_mod_id"):
+            await _resolve_curseforge_pack(spec)
+        if spec.get("cf_world_id"):
+            await _resolve_curseforge_world(spec)
+    except CF.CurseForgeError as e:
+        raise _cf_http(e)
     try:
         # Blocking docker work - keep it off the event loop now that this
         # endpoint is async.
@@ -811,7 +893,7 @@ async def client_pack(sid: str):
         raise HTTPException(
             400,
             "No client pack for this server type. Modrinth modpacks and "
-            "hand-picked mod lists can produce one; CurseForge server packs and "
+            "hand-picked mod lists can produce one; uploaded server packs and "
             "plain servers cannot.",
         )
 
@@ -820,6 +902,28 @@ async def client_pack(sid: str):
         spec.get("loader", "fabric"), mods, address,
     )
     return _pack_response(sid, data, report)
+
+
+@app.get("/api/servers/{sid}/cfpack")
+async def curseforge_client_pack(sid: str):
+    """The pack's own CurseForge zip with this server already in the
+    Multiplayer list. Import it in the CurseForge app or Prism."""
+    meta = S.load_meta(sid)
+    if not meta:
+        raise HTTPException(404, "unknown server")
+    spec = meta.get("spec") or {}
+    if meta.get("kind") != "curseforge" or not (spec.get("cf_mod_id") and spec.get("cf_file_id")):
+        raise HTTPException(400, "This world was not installed from CurseForge.")
+    address = S.connect_info(meta).get("public") or S.connect_info(meta)["lan"]
+    try:
+        f = await CF.file(spec["cf_mod_id"], spec["cf_file_id"])
+        path = await CF.client_pack(S.server_dir(sid), f, meta["name"], address)
+    except CF.CurseForgeError as e:
+        raise _cf_http(e)
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"Could not fetch the pack from CurseForge ({type(e).__name__}).")
+    safe = re.sub(r"[^A-Za-z0-9._ -]+", "", f["name"] or sid).strip() or sid
+    return FileResponse(path, media_type="application/zip", filename=f"{safe} + {sid}.zip")
 
 
 def _pack_response(sid: str, data: bytes, report: dict) -> Response:

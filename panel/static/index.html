@@ -149,7 +149,7 @@
     <nav class="tabs" id="createTabs">
       <button class="tab active" data-tab="install"><svg class="ico"><use href="#i-box"/></svg>Install a world</button>
       <button class="tab" data-tab="mods"><svg class="ico"><use href="#i-pickaxe"/></svg>Build a modpack</button>
-      <button class="tab" data-tab="curseforge"><svg class="ico"><use href="#i-flame"/></svg>CurseForge</button>
+      <button class="tab" data-tab="curseforge"><svg class="ico"><use href="#i-upload"/></svg>Upload a pack</button>
     </nav>
 
     <!-- One scroll region for the panels AND the shared options below them.
@@ -169,43 +169,80 @@
             <svg class="ico"><use href="#i-cube"/></svg>Plain world</button>
         </div>
 
-      <!-- Modrinth / FTB browser -->
+      <!-- CurseForge / Modrinth / FTB browser -->
       <div class="install-mode active" data-mode="modpack">
         <div class="search-row">
           <select id="mrSource" title="Where to search">
+            <option value="curseforge">CurseForge — the biggest library</option>
             <option value="modrinth">Modrinth — 18,000+</option>
             <option value="ftb">FTB — curated</option>
           </select>
-          <input type="search" id="mrQuery" placeholder="Search modpacks — try 'create', 'skyblock', 'better mc'…" autocomplete="off">
+          <input type="search" id="mrQuery" placeholder="Search modpacks — try 'all the mods', 'skyblock', 'create'…" autocomplete="off">
           <select id="mrVersionFilter" title="Filter by Minecraft version">
             <option value="">Any MC version</option>
           </select>
         </div>
+        <div class="search-row sub-filters" id="cfFilters" hidden>
+          <select id="cfSort" title="Order">
+            <option value="popular">Most popular</option>
+            <option value="downloads">Most downloaded</option>
+            <option value="updated">Recently updated</option>
+            <option value="new">Newest</option>
+          </select>
+          <select id="cfLoader" title="Mod loader">
+            <option value="">Any loader</option>
+            <option value="neoforge">NeoForge</option>
+            <option value="forge">Forge</option>
+            <option value="fabric">Fabric</option>
+            <option value="quilt">Quilt</option>
+          </select>
+          <select id="cfCategory" title="Category">
+            <option value="">All categories</option>
+          </select>
+          <span class="result-count" id="mrCount"></span>
+        </div>
+        <!-- Sticky, so the chosen pack and its version stay in view while the
+             grid scrolls. Appended below the grid it sat 24 tiles down. -->
+        <div class="pick-bar" id="mrPick" hidden></div>
         <div class="pack-grid" id="mrResults"></div>
         <div class="pack-more"><button class="btn ghost" id="mrMore" hidden>Load more</button></div>
       </div>
 
       <!-- Adventure map -->
       <div class="install-mode" data-mode="adventure">
-        <p class="panel-note">
-          Drop in a world <code>.zip</code> from <a href="https://www.planetminecraft.com/projects/"
-          target="_blank" rel="noopener">Planet&nbsp;Minecraft</a>,
-          <a href="https://www.minecraftmaps.com/" target="_blank" rel="noopener">MinecraftMaps</a>
-          or <a href="https://www.curseforge.com/minecraft/worlds" target="_blank"
-          rel="noopener">CurseForge&nbsp;Worlds</a>. RamCraft unpacks it as the world and boots a
-          server on the version you pick.
-        </p>
-        <div class="field">
+        <!-- CurseForge Worlds, installed straight off its CDN with the API key. -->
+        <div id="cwBrowser" hidden>
+          <div class="search-row">
+            <input type="search" id="cwQuery" placeholder="Search CurseForge worlds — try 'parkour', 'oneblock', 'escape'…" autocomplete="off">
+            <select id="cwVersion" title="Filter by Minecraft version">
+              <option value="">Any MC version</option>
+            </select>
+          </div>
+          <div class="pick-bar" id="cwPick" hidden></div>
+          <div class="pack-grid" id="cwResults"></div>
+          <div class="pack-more"><button class="btn ghost" id="cwMore" hidden>Load more</button></div>
+        </div>
+        <details class="advanced" id="advOwn">
+          <summary>Or bring a map from somewhere else</summary>
+          <p class="panel-note">
+            Drop in a world <code>.zip</code> from <a href="https://www.planetminecraft.com/projects/"
+            target="_blank" rel="noopener">Planet&nbsp;Minecraft</a> or
+            <a href="https://www.minecraftmaps.com/" target="_blank" rel="noopener">MinecraftMaps</a>.
+            Those sites block servers from downloading, so save it in your browser first.
+            RamCraft unpacks it as the world and boots a server on the version you pick.
+          </p>
+          <div class="field">
+            <label>World .zip</label>
+            <div class="pack-drop" id="advDrop">
+              <input type="file" id="advFile" accept=".zip" hidden>
+              <svg class="ico drop-ico"><use href="#i-upload"/></svg><span id="advDropText">Drop the map .zip here, or click to choose</span>
+            </div>
+            <input id="advWorld" placeholder="…or paste a direct link to the .zip" style="margin-top:9px">
+          </div>
+        </details>
+        <div class="field" style="margin-top:16px">
           <label for="advName">Server name</label>
           <input id="advName" placeholder="The Dropper">
-        </div>
-        <div class="field">
-          <label>World .zip</label>
-          <div class="pack-drop" id="advDrop">
-            <input type="file" id="advFile" accept=".zip" hidden>
-            <svg class="ico drop-ico"><use href="#i-upload"/></svg><span id="advDropText">Drop the map .zip here, or click to choose</span>
-          </div>
-          <input id="advWorld" placeholder="…or paste a direct link to the .zip" style="margin-top:9px">
         </div>
         <div class="field-row">
           <div class="field">
@@ -288,13 +325,13 @@
         <div class="pack-more"><button class="btn ghost" id="modsMore" hidden>Load more</button></div>
       </section>
 
-      <!-- CurseForge -->
+      <!-- Upload a server pack: for packs RamCraft may not download itself -->
       <section class="tab-panel" data-panel="curseforge">
         <p class="panel-note">
-          CurseForge-only packs (All the Mods, RLCraft, DawnCraft…) can be installed
-          <b>without an API key</b> — download the pack's <b>Server Pack</b> zip from its
-          Files tab in your browser and drop it here. The key is only needed if you want
-          RamCraft to fetch packs by URL automatically.
+          Most packs install straight from <b>Install a world</b>. This is for the rest: packs
+          whose author blocks automatic downloads (they carry a <b>manual download</b> tag
+          there) and packs from anywhere else. Download the pack's <b>Server Pack</b> zip —
+          on CurseForge it is under the Files tab — and drop it here.
         </p>
         <div class="field">
           <label for="cfName">Server name</label>
@@ -318,7 +355,7 @@
         </div>
 
         <details class="advanced">
-          <summary>Or fetch by URL using an API key</summary>
+          <summary>Or install by CurseForge page URL</summary>
           <p class="panel-note" id="cfKeyNote" style="margin-top:12px"></p>
           <div class="field">
             <label for="cfUrl">CurseForge modpack page URL</label>

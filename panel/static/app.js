@@ -6,10 +6,16 @@ const state = {
   servers: [],
   host: {},
   players: {},          // id -> {online,max,names}
-  pick: null,           // chosen modrinth pack
+  pick: null,           // chosen pack: {slug} Modrinth, {ftb} FTB, {cf} CurseForge
   pickVersions: [],
   mrOffset: 0,
   mrQuery: '',
+  mrSeq: 0,             // drops search answers that arrive after a newer search
+  cfKey: false,         // a CurseForge API key is stored
+  cfWorld: null,        // chosen CurseForge world
+  cwFiles: [],
+  cwOffset: 0,
+  cwSeq: 0,
   detailId: null,
   stream: null,
   busy: new Set(),
@@ -99,6 +105,8 @@ const STATE_ICON = {
   online: 'i-bolt', starting: 'i-restart', stopped: 'i-moon',
   crashed: 'i-alert', unhealthy: 'i-alert', missing: 'i-cube',
 };
+
+const LOADER_LABEL = { forge: 'Forge', neoforge: 'NeoForge', fabric: 'Fabric', quilt: 'Quilt' };
 
 const KIND_LABEL = {
   modrinth: 'Modrinth pack', curseforge: 'CurseForge pack', ftb: 'FTB pack',
@@ -303,12 +311,12 @@ function renderServers() {
             <button class="start-tile" data-start="modpack">
               <span class="t-ico"><svg class="ico"><use href="#i-box"/></svg></span>
               <b>Modpack</b>
-              <span>Browse thousands on Modrinth and install one in two clicks.</span>
+              <span>Browse CurseForge, Modrinth and FTB, and install one in two clicks.</span>
             </button>
             <button class="start-tile" data-start="adventure">
               <span class="t-ico"><svg class="ico"><use href="#i-map"/></svg></span>
               <b>Adventure map</b>
-              <span>Drop in a world .zip and play it with friends.</span>
+              <span>Pick one from CurseForge, or drop in a world .zip.</span>
             </button>
             <button class="start-tile" data-start="mods">
               <span class="t-ico"><svg class="ico"><use href="#i-sliders"/></svg></span>
@@ -535,6 +543,7 @@ $('#installSeg').addEventListener('click', e => {
   $$('#installSeg .seg-btn').forEach(b => b.classList.toggle('active', b === btn));
   $$('#createModal .install-mode').forEach(p =>
     p.classList.toggle('active', p.dataset.mode === btn.dataset.mode));
+  if (btn.dataset.mode === 'adventure') ensureWorlds();
   applyTabMemoryDefault(btn.dataset.mode);
   updateSummary();
 });
@@ -580,12 +589,15 @@ async function loadMcVersions() {
     $('#plainVersion').innerHTML = `<option value="LATEST">Latest (${v.latest})</option>` + opts;
     $('#advVersion').innerHTML = opts;
     $('#advVersion').value = v.latest;
+    syncWorldVersion();   // a map picked before this list arrived keeps its version
     $('#cfPackVersion').innerHTML = opts;
     $('#cfPackVersion').value = v.latest;
     $('#modsVersion').innerHTML = opts;
     $('#modsVersion').value = v.latest;
-    $('#mrVersionFilter').innerHTML = '<option value="">Any MC version</option>' +
+    const filter = '<option value="">Any MC version</option>' +
       v.releases.slice(0, 30).map(r => `<option value="${r}">${r}</option>`).join('');
+    $('#mrVersionFilter').innerHTML = filter;
+    $('#cwVersion').innerHTML = filter;
   } catch { /* offline - the field just stays empty */ }
 }
 
@@ -609,7 +621,11 @@ async function openCreate() {
   syncAllModTiles();
   modHits = [];
   $('#modsResults').innerHTML = '';
-  const oldPick = $('#mrVersionPick'); if (oldPick) oldPick.remove();
+  clearPick($('#mrPick'));
+  clearWorldPick();
+  $('#cwResults').innerHTML = '';
+  $('#cwQuery').value = '';
+  $('#advOwn').open = false;
   // Clear the form too. These persist in the DOM, so the previous world's
   // MOTD, ops and uploads were silently applied to the next one.
   ['#optMotd', '#optOps', '#optPort', '#advName', '#advWorld', '#plainName',
@@ -639,10 +655,13 @@ async function openCreate() {
   memoryTouched = false;
   applyTabMemoryDefault(activeCreateTab());
   const s = await api('/settings').catch(() => ({}));
+  state.cfKey = !!s.cf_api_key_set;
   $('#cfKeyNote').innerHTML = s.cf_api_key_set
-    ? 'CurseForge API key is set. Paste any modpack page URL below.'
-    : '<strong>No CurseForge API key yet.</strong> Add one under Settings — CurseForge requires it. Modrinth packs (first tab) need nothing.';
+    ? 'CurseForge is connected. Paste any modpack page URL below.'
+    : '<strong>No CurseForge API key yet.</strong> Add one under Settings — CurseForge requires it. Modrinth and FTB packs need nothing.';
   $('#cfKeyNote').classList.toggle('warn', !s.cf_api_key_set);
+  // CurseForge has the most packs, so it leads whenever it can be searched.
+  $('#mrSource').value = state.cfKey ? 'curseforge' : 'modrinth';
   searchModrinth(true);
   updateSummary();
 }
@@ -654,105 +673,268 @@ $('#mrQuery').addEventListener('input', () => {
   mrTimer = setTimeout(() => { state.mrOffset = 0; searchModrinth(true); }, 320);
 });
 $('#mrVersionFilter').addEventListener('change', () => { state.mrOffset = 0; searchModrinth(true); });
+['#cfSort', '#cfLoader', '#cfCategory'].forEach(sel =>
+  $(sel).addEventListener('change', () => { state.mrOffset = 0; searchModrinth(true); }));
 $('#mrMore').onclick = () => { state.mrOffset += 24; searchModrinth(false); };
+
+const SOURCE_LABEL = { curseforge: 'CurseForge', modrinth: 'Modrinth', ftb: 'FTB' };
+
+// One tile for every source, so the three catalogues look and behave alike.
+function packTile(h, attrs, meta, blocked = false) {
+  return `
+    <button class="pack${blocked ? ' blocked' : ''}" ${attrs} data-title="${esc(h.title)}" data-icon="${esc(h.icon || '')}">
+      ${h.icon ? `<img src="${esc(h.icon)}" alt="" loading="lazy">` : '<div class="ph"></div>'}
+      <div class="info">
+        <div class="name">${esc(h.title)}</div>
+        <div class="desc">${esc(h.description)}</div>
+        <div class="dl">${meta}</div>
+      </div>
+    </button>`;
+}
+
+function cfTile(h, kind = 'modpack') {
+  const meta = [nfmt(h.downloads) + ' downloads', h.versions[0] && 'MC ' + h.versions[0],
+                h.loaders.map(l => LOADER_LABEL[l] || l).join(' / ')]
+    .filter(Boolean).map(esc).join(' · ')
+    + (h.auto ? '' : '<span class="tag" title="The author blocks automatic downloads">manual download</span>');
+  return packTile(h, `data-cf="${h.id}" data-kind="${kind}" data-url="${esc(h.url || '')}" data-auto="${h.auto ? 1 : 0}" data-mc="${esc(h.versions[0] || '')}"`,
+                  meta, !h.auto);
+}
+
+function searchError(src, e) {
+  // Without a key CurseForge cannot be searched at all - say where to fix that.
+  const needsKey = src === 'curseforge' && /API key/i.test(e.message);
+  return `<div class="list-empty">${esc(e.message)}${needsKey
+    ? '<br><button class="btn sm" data-open-settings style="margin-top:10px">Open Settings</button>' : ''}</div>`;
+}
+
+let cfCatsLoaded = false;
+async function loadCfCategories() {
+  if (cfCatsLoaded) return;
+  cfCatsLoaded = true;
+  try {
+    const r = await api('/curseforge/categories?kind=modpack');
+    $('#cfCategory').innerHTML = '<option value="">All categories</option>' +
+      r.categories.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  } catch { cfCatsLoaded = false; }
+}
 
 async function searchModrinth(reset) {
   const q = $('#mrQuery').value.trim();
   const v = $('#mrVersionFilter').value;
   const src = $('#mrSource').value;
   const box = $('#mrResults');
+  // Typing fires a search per pause; an older, slower answer must not land
+  // on top of a newer one.
+  const seq = ++state.mrSeq;
   // FTB's catalogue is ~100 packs served whole, so it has no paging or
   // version facet - hide the controls that would do nothing there.
   $('#mrVersionFilter').hidden = src === 'ftb';
-  if (reset) box.innerHTML = `<div class="list-empty"><span class="spinner"></span> Searching ${src === 'ftb' ? 'FTB' : 'Modrinth'}…</div>`;
+  $('#cfFilters').hidden = src !== 'curseforge';
+  if (reset) {
+    box.innerHTML = `<div class="list-empty"><span class="spinner"></span> Searching ${SOURCE_LABEL[src]}…</div>`;
+    $('#mrMore').hidden = true;
+  }
 
-  if (src === 'ftb') {
-    try {
+  let html = '', more = false;
+  try {
+    if (src === 'curseforge') {
+      loadCfCategories();
+      const p = new URLSearchParams({
+        q, version: v, loader: $('#cfLoader').value, category: $('#cfCategory').value || 0,
+        sort: $('#cfSort').value, offset: state.mrOffset, limit: 24,
+      });
+      const r = await api('/search/curseforge?' + p);
+      if (seq !== state.mrSeq) return;
+      html = r.hits.map(h => cfTile(h)).join('');
+      more = r.hits.length === 24 && state.mrOffset + 24 < r.total;
+      $('#mrCount').textContent = r.total >= 10000 ? '10,000+ packs'
+        : `${r.total.toLocaleString()} pack${r.total === 1 ? '' : 's'}`;
+    } else if (src === 'ftb') {
       const r = await api(`/search/ftb?q=${encodeURIComponent(q)}`);
-      box.innerHTML = r.hits.map(h => `
-        <button class="pack" data-ftb="${h.id}" data-title="${esc(h.title)}"
-                data-icon="${esc(h.icon || '')}" data-versions='${esc(JSON.stringify(h.versions))}'>
-          ${h.icon ? `<img src="${esc(h.icon)}" alt="" loading="lazy">` : '<div class="ph"></div>'}
-          <div class="info">
-            <div class="name">${esc(h.title)}</div>
-            <div class="desc">${esc(h.description)}</div>
-            <div class="dl">${nfmt(h.downloads)} installs</div>
-          </div>
-        </button>`).join('') || '<div class="list-empty">Nothing matched that search.</div>';
-      $('#mrMore').hidden = true;
-    } catch (e) {
-      box.innerHTML = `<div class="list-empty">Could not reach FTB — ${esc(e.message)}</div>`;
+      if (seq !== state.mrSeq) return;
+      html = r.hits.map(h => packTile(h,
+        `data-ftb="${h.id}" data-versions='${esc(JSON.stringify(h.versions))}'`,
+        `${nfmt(h.downloads)} installs`)).join('');
+    } else {
+      const r = await api(`/search/modrinth?q=${encodeURIComponent(q)}&offset=${state.mrOffset}&version=${encodeURIComponent(v)}&limit=24`);
+      if (seq !== state.mrSeq) return;
+      html = r.hits.map(h => packTile(h, `data-slug="${esc(h.slug)}"`, `${nfmt(h.downloads)} downloads`)).join('');
+      more = r.hits.length === 24;
     }
+  } catch (e) {
+    if (seq !== state.mrSeq) return;
+    box.innerHTML = searchError(src, e);
     return;
   }
-
-  try {
-    const r = await api(`/search/modrinth?q=${encodeURIComponent(q)}&offset=${state.mrOffset}&version=${encodeURIComponent(v)}&limit=24`);
-    const html = r.hits.map(h => `
-      <button class="pack" data-slug="${esc(h.slug)}" data-title="${esc(h.title)}" data-icon="${esc(h.icon || '')}">
-        ${h.icon ? `<img src="${esc(h.icon)}" alt="" loading="lazy">` : '<div class="ph"></div>'}
-        <div class="info">
-          <div class="name">${esc(h.title)}</div>
-          <div class="desc">${esc(h.description)}</div>
-          <div class="dl">${nfmt(h.downloads)} downloads</div>
-        </div>
-      </button>`).join('');
-    if (reset) box.innerHTML = html || '<div class="list-empty">Nothing matched that search.</div>';
-    else box.insertAdjacentHTML('beforeend', html);
-    $('#mrMore').hidden = r.hits.length < 24;
-  } catch (e) {
-    box.innerHTML = `<div class="list-empty">Could not reach Modrinth — ${esc(e.message)}</div>`;
-  }
+  if (reset) box.innerHTML = html || '<div class="list-empty">Nothing matched that search.</div>';
+  else box.insertAdjacentHTML('beforeend', html);
+  $('#mrMore').hidden = !more;
+  markPicked();
 }
 
+// Keep the chosen pack highlighted when a new page or search brings it back.
+function markPicked() {
+  const p = state.pick;
+  $$('#mrResults .pack').forEach(el => el.classList.toggle('selected', !!p && (
+    (p.cf && el.dataset.cf === String(p.cf)) ||
+    (p.ftb && el.dataset.ftb === String(p.ftb)) ||
+    (p.slug && el.dataset.slug === p.slug))));
+}
+
+// The chosen pack, pinned above the grid. `sub` and `version` are HTML the
+// caller has already escaped; `note` is a warning shown beneath them.
+function showPick(bar, { icon, title, sub = '', version = '', note = '' }) {
+  bar.hidden = false;
+  bar.innerHTML = `
+    ${icon ? `<img src="${esc(icon)}" alt="">` : '<div class="ph"></div>'}
+    <div class="pick-main"><b>${esc(title)}</b><span class="pick-sub">${sub}</span></div>
+    ${version ? `<div class="pick-version">${version}</div>` : ''}
+    ${note ? `<div class="panel-note warn">${note}</div>` : ''}`;
+}
+
+function clearPick(bar) {
+  bar.hidden = true;
+  bar.innerHTML = '';
+}
+
+const LOADING_VERSIONS = '<label>Version</label><span class="pick-sub"><span class="spinner"></span> Loading versions…</span>';
+
 $('#mrResults').addEventListener('click', async e => {
+  if (e.target.closest('[data-open-settings]')) return $('#btnSettings').click();
   const pack = e.target.closest('.pack');
   if (!pack) return;
   $$('.pack', $('#mrResults')).forEach(p => p.classList.toggle('selected', p === pack));
+  const bar = $('#mrPick');
+
+  if (pack.dataset.cf) return pickCurseForge(pack);
 
   // FTB packs carry their version list inline - no second request needed.
   if (pack.dataset.ftb) {
     const versions = JSON.parse(pack.dataset.versions || '[]');
     state.pick = { ftb: Number(pack.dataset.ftb), title: pack.dataset.title, icon: pack.dataset.icon };
     state.pickVersions = [];
-    const old = $('#mrVersionPick'); if (old) old.remove();
-    const holder = document.createElement('div');
-    holder.className = 'version-pick';
-    holder.id = 'mrVersionPick';
-    holder.innerHTML = `<label for="mrVersion">Pack version</label>
-      <select id="mrVersion">${versions.map((v, i) =>
-        `<option value="${v.id}" ${i === 0 ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}</select>`;
-    $('[data-panel=modpack]').appendChild(holder);
+    showPick(bar, {
+      icon: state.pick.icon, title: state.pick.title, sub: 'FTB',
+      version: `<label for="mrVersion">Pack version</label>
+        <select id="mrVersion">${versions.map((v, i) =>
+          `<option value="${v.id}" ${i === 0 ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}</select>`,
+    });
     $('#mrVersion').addEventListener('change', updateSummary);
     updateSummary();
     return;
   }
 
-  state.pick = { slug: pack.dataset.slug, title: pack.dataset.title, icon: pack.dataset.icon };
+  const pick = { slug: pack.dataset.slug, title: pack.dataset.title, icon: pack.dataset.icon };
+  state.pick = pick;
   state.pickVersions = [];
+  showPick(bar, { icon: pick.icon, title: pick.title, sub: 'Modrinth', version: LOADING_VERSIONS });
   updateSummary();
 
   // Pull the version list so the user can pin one, defaulting to newest release.
-  const old = $('#mrVersionPick'); if (old) old.remove();
-  const holder = document.createElement('div');
-  holder.className = 'version-pick';
-  holder.id = 'mrVersionPick';
-  holder.innerHTML = '<label>Pack version</label><div class="list-empty"><span class="spinner"></span> Loading versions…</div>';
-  $('[data-panel=modpack]').appendChild(holder);
+  let version;
   try {
-    const r = await api(`/modrinth/${encodeURIComponent(state.pick.slug)}/versions`);
+    const r = await api(`/modrinth/${encodeURIComponent(pick.slug)}/versions`);
+    if (state.pick !== pick) return;
     state.pickVersions = r.versions;
-    if (!r.versions.length) { holder.innerHTML = '<p class="hint">No published versions found.</p>'; return; }
-    holder.innerHTML = `<label for="mrVersion">Pack version</label>
-      <select id="mrVersion">${r.versions.map((v, i) => `
-        <option value="${esc(v.id)}" data-mc="${esc(v.game_versions[0] || '')}" ${i === 0 ? 'selected' : ''}>
-          ${esc(v.version_number || v.name)} — MC ${esc(v.game_versions.join(', '))} ${v.type !== 'release' ? '(' + esc(v.type) + ')' : ''}
-        </option>`).join('')}</select>`;
-    $('#mrVersion').addEventListener('change', updateSummary);
-    updateSummary();
+    version = r.versions.length
+      ? `<label for="mrVersion">Pack version</label>
+        <select id="mrVersion">${r.versions.map((v, i) => `
+          <option value="${esc(v.id)}" ${i === 0 ? 'selected' : ''}>
+            ${esc(v.version_number || v.name)} — MC ${esc(v.game_versions.join(', '))} ${v.type !== 'release' ? '(' + esc(v.type) + ')' : ''}
+          </option>`).join('')}</select>`
+      : '<span class="pick-sub">No published versions — the latest will be used.</span>';
   } catch (e) {
-    holder.innerHTML = `<p class="hint">Could not load versions: ${esc(e.message)}. The latest will be used.</p>`;
+    if (state.pick !== pick) return;
+    version = `<span class="pick-sub">Could not load versions: ${esc(e.message)}. The latest will be used.</span>`;
   }
+  showPick(bar, { icon: pick.icon, title: pick.title, sub: 'Modrinth', version });
+  $('#mrVersion')?.addEventListener('change', updateSummary);
+  updateSummary();
+});
+
+function blockedNote(url, what = 'pack') {
+  const page = url ? `<a href="${esc(url)}/files" target="_blank" rel="noopener">its CurseForge page</a>` : 'CurseForge';
+  return what === 'pack'
+    ? `<b>The author blocks automatic downloads</b>, so RamCraft cannot fetch this pack itself.
+       Download its <b>Server Pack</b> from the Files tab on ${page}, then drop the zip in
+       <b>Upload a pack</b>.<br><button class="btn sm" data-go-upload>Go to Upload a pack</button>`
+    : `<b>The author blocks automatic downloads</b>, so RamCraft cannot fetch this map itself.
+       Download it from ${page} and drop the .zip in instead.
+       <br><button class="btn sm" data-go-own>Drop a map instead</button>`;
+}
+
+function cfPickSub(pick, f, label = 'CurseForge') {
+  const bits = [label, f?.loader && LOADER_LABEL[f.loader], f?.size_mb && f.size_mb + ' MB download']
+    .filter(Boolean).map(esc);
+  if (pick.url) {
+    bits.push(`<a href="${esc(pick.url)}${f ? '/files/' + f.id : ''}" target="_blank" rel="noopener">View on CurseForge ↗</a>`);
+  }
+  return bits.join(' · ');
+}
+
+async function pickCurseForge(pack) {
+  const pick = {
+    cf: Number(pack.dataset.cf), title: pack.dataset.title, icon: pack.dataset.icon,
+    url: pack.dataset.url, auto: pack.dataset.auto === '1', mc: pack.dataset.mc,
+  };
+  state.pick = pick;
+  state.pickVersions = [];
+  const bar = $('#mrPick');
+  if (!pick.auto) {
+    showPick(bar, { icon: pick.icon, title: pick.title, sub: cfPickSub(pick), note: blockedNote(pick.url) });
+    updateSummary();
+    return;
+  }
+  showPick(bar, { icon: pick.icon, title: pick.title, sub: cfPickSub(pick), version: LOADING_VERSIONS });
+  updateSummary();
+
+  let files = [];
+  try {
+    files = (await api(`/curseforge/${pick.cf}/files`)).files;
+  } catch (e) {
+    if (state.pick !== pick) return;
+    showPick(bar, {
+      icon: pick.icon, title: pick.title, sub: cfPickSub(pick),
+      version: `<span class="pick-sub">Could not load versions: ${esc(e.message)}. The newest release will be used.</span>`,
+    });
+    return;
+  }
+  if (state.pick !== pick) return;
+  state.pickVersions = files;
+  if (!files.length) {
+    showPick(bar, { icon: pick.icon, title: pick.title, sub: cfPickSub(pick),
+                    version: '<span class="pick-sub">No versions to install.</span>' });
+    return;
+  }
+  // Same default the server picks: the newest stable release, not a beta.
+  const def = files.find(f => f.type === 'release') || files[0];
+  showPick(bar, {
+    icon: pick.icon, title: pick.title, sub: cfPickSub(pick, def),
+    version: `<label for="mrVersion">Pack version</label>
+      <select id="mrVersion">${files.map(f => `
+        <option value="${f.id}" ${f === def ? 'selected' : ''}>${esc(f.name)} — MC ${esc(f.mc || '?')}${f.type !== 'release' ? ' (' + esc(f.type) + ')' : ''}</option>`).join('')}</select>`,
+    note: def.auto ? '' : blockedNote(pick.url),
+  });
+  // Only the details line changes; rebuilding the bar would steal focus from
+  // the select mid-choice.
+  $('#mrVersion').addEventListener('change', () => {
+    $('#mrPick .pick-sub').innerHTML = cfPickSub(pick, currentCfFile());
+    updateSummary();
+  });
+  updateSummary();
+}
+
+$('#mrPick').addEventListener('click', e => {
+  if (!e.target.closest('[data-go-upload]')) return;
+  const { title, mc } = state.pick || {};
+  $('#createTabs [data-tab="curseforge"]').click();
+  if (title && !$('#cfName').value.trim()) $('#cfName').value = title.slice(0, 40);
+  // The server pack needs its Minecraft version to get the right Java, and
+  // CurseForge already said which it is.
+  if (mc && [...$('#cfPackVersion').options].some(o => o.value === mc)) $('#cfPackVersion').value = mc;
+  $('#createModal .modal-scroll').scrollTop = 0;
+  updateSummary();
 });
 
 function currentPickVersion() {
@@ -760,6 +942,176 @@ function currentPickVersion() {
   if (!sel) return null;
   return state.pickVersions.find(v => v.id === sel.value) || null;
 }
+
+// CurseForge file ids are numbers; the select hands back strings.
+function currentCfFile() {
+  const sel = $('#mrVersion');
+  return sel ? state.pickVersions.find(f => String(f.id) === sel.value) || null : null;
+}
+
+/* ---------- CurseForge worlds ---------- */
+
+let cwTimer;
+$('#cwQuery').addEventListener('input', () => {
+  clearTimeout(cwTimer);
+  cwTimer = setTimeout(() => { state.cwOffset = 0; searchWorlds(true); }, 320);
+});
+$('#cwVersion').addEventListener('change', () => { state.cwOffset = 0; searchWorlds(true); });
+$('#cwMore').onclick = () => { state.cwOffset += 12; searchWorlds(false); };
+
+// Runs when the Adventure map mode opens. Without a key the map has to come
+// from elsewhere, so that route is shown open instead.
+function ensureWorlds() {
+  $('#cwBrowser').hidden = !state.cfKey;
+  if (!state.cfKey) { $('#advOwn').open = true; return; }
+  if (!$('#cwResults').childElementCount) { state.cwOffset = 0; searchWorlds(true); }
+}
+
+async function searchWorlds(reset) {
+  const box = $('#cwResults');
+  const seq = ++state.cwSeq;
+  if (reset) {
+    box.innerHTML = '<div class="list-empty"><span class="spinner"></span> Searching CurseForge worlds…</div>';
+    $('#cwMore').hidden = true;
+  }
+  try {
+    const p = new URLSearchParams({
+      kind: 'world', q: $('#cwQuery').value.trim(), version: $('#cwVersion').value,
+      offset: state.cwOffset, limit: 12,
+    });
+    const r = await api('/search/curseforge?' + p);
+    if (seq !== state.cwSeq) return;
+    const html = r.hits.map(h => cfTile(h, 'world')).join('');
+    if (reset) box.innerHTML = html || '<div class="list-empty">Nothing matched that search.</div>';
+    else box.insertAdjacentHTML('beforeend', html);
+    $('#cwMore').hidden = !(r.hits.length === 12 && state.cwOffset + 12 < r.total);
+    $$('.pack', box).forEach(el =>
+      el.classList.toggle('selected', !!state.cfWorld && el.dataset.cf === String(state.cfWorld.id)));
+  } catch (e) {
+    if (seq !== state.cwSeq) return;
+    box.innerHTML = searchError('curseforge', e);
+  }
+}
+
+$('#cwResults').addEventListener('click', e => {
+  if (e.target.closest('[data-open-settings]')) return $('#btnSettings').click();
+  const tile = e.target.closest('.pack');
+  if (tile) pickWorld(tile);
+});
+
+$('#cwPick').addEventListener('click', e => {
+  if (!e.target.closest('[data-go-own]')) return;
+  // They are about to upload this same map, so its name and version stay.
+  const { title, mc } = state.cfWorld || {};
+  clearWorldPick();
+  if (title && !$('#advName').value.trim()) $('#advName').value = title.slice(0, 40);
+  if (mc) {
+    const sel = $('#advVersion');
+    if (![...sel.options].some(o => o.value === mc)) sel.insertAdjacentHTML('afterbegin', `<option value="${esc(mc)}">${esc(mc)}</option>`);
+    sel.value = mc;
+  }
+  $('#advOwn').open = true;
+  $('#advDrop').scrollIntoView({ block: 'center' });
+  updateSummary();
+});
+
+async function pickWorld(tile) {
+  const w = {
+    id: Number(tile.dataset.cf), title: tile.dataset.title, icon: tile.dataset.icon,
+    url: tile.dataset.url, auto: tile.dataset.auto === '1', mc: tile.dataset.mc,
+  };
+  state.cfWorld = w;
+  state.cwFiles = [];
+  $$('#cwResults .pack').forEach(el => el.classList.toggle('selected', el === tile));
+  // A picked world replaces any map that was uploaded or pasted.
+  clearOwnMap();
+  const nameEl = $('#advName');
+  if (!nameEl.value.trim() || nameEl.dataset.auto === '1') {
+    nameEl.value = w.title.slice(0, 40);
+    nameEl.dataset.auto = '1';
+  }
+  const bar = $('#cwPick');
+  const sub = f => cfPickSub(w, f, 'CurseForge world');
+  if (!w.auto) {
+    showPick(bar, { icon: w.icon, title: w.title, sub: sub(), note: blockedNote(w.url, 'world') });
+    updateSummary();
+    return;
+  }
+  showPick(bar, { icon: w.icon, title: w.title, sub: sub(), version: LOADING_VERSIONS });
+  updateSummary();
+
+  let files = [];
+  try {
+    files = (await api(`/curseforge/${w.id}/files`)).files;
+  } catch (e) {
+    if (state.cfWorld !== w) return;
+    showPick(bar, { icon: w.icon, title: w.title, sub: sub(),
+      version: `<span class="pick-sub">Could not load versions: ${esc(e.message)}. The newest will be used.</span>` });
+    return;
+  }
+  if (state.cfWorld !== w) return;
+  state.cwFiles = files;
+  if (!files.length) {
+    showPick(bar, { icon: w.icon, title: w.title, sub: sub(),
+                    version: '<span class="pick-sub">No versions to install.</span>' });
+    return;
+  }
+  const def = files.find(f => f.type === 'release') || files[0];
+  showPick(bar, {
+    icon: w.icon, title: w.title, sub: sub(def),
+    version: `<label for="cwFile">Map version</label>
+      <select id="cwFile">${files.map(f => `
+        <option value="${f.id}" ${f === def ? 'selected' : ''}>${esc(f.name)} — MC ${esc(f.mc || '?')}</option>`).join('')}</select>`,
+    note: def.auto ? '' : blockedNote(w.url, 'world'),
+  });
+  $('#cwFile').addEventListener('change', () => {
+    $('#cwPick .pick-sub').innerHTML = sub(currentCwFile());
+    syncWorldVersion();
+    updateSummary();
+  });
+  syncWorldVersion();
+  updateSummary();
+}
+
+function currentCwFile() {
+  const sel = $('#cwFile');
+  return sel ? state.cwFiles.find(f => String(f.id) === sel.value) || null : null;
+}
+
+// Adventure maps are built for one exact version, and CurseForge says which -
+// so set it rather than leave the user to read it off the map's page.
+function syncWorldVersion() {
+  const f = currentCwFile();
+  if (!f?.mc) return;
+  const sel = $('#advVersion');
+  if (![...sel.options].some(o => o.value === f.mc)) {
+    sel.insertAdjacentHTML('afterbegin', `<option value="${esc(f.mc)}">${esc(f.mc)}</option>`);
+  }
+  sel.value = f.mc;
+}
+
+function clearWorldPick() {
+  state.cfWorld = null;
+  state.cwFiles = [];
+  clearPick($('#cwPick'));
+  $$('#cwResults .pack').forEach(el => el.classList.remove('selected'));
+  // Only a name that came from the pick goes with it; a typed one stays.
+  const nameEl = $('#advName');
+  if (nameEl.dataset.auto === '1') nameEl.value = '';
+  delete nameEl.dataset.auto;
+}
+
+function clearOwnMap() {
+  state.uploadedWorld = null;
+  $('#advWorld').value = '';
+  $('#advDrop').classList.remove('has-file', 'over');
+  $('#advDropText').textContent = 'Drop the map .zip here, or click to choose';
+}
+
+$('#advName').addEventListener('input', () => { delete $('#advName').dataset.auto; });
+$('#advWorld').addEventListener('input', () => {
+  if ($('#advWorld').value.trim() && state.cfWorld) clearWorldPick();
+});
 
 // The subdomain tracks the server name until the user types their own.
 let subdomainTouched = false;
@@ -829,7 +1181,8 @@ wireDrop({
 wireDrop({
   drop: '#advDrop', input: '#advFile', label: '#advDropText', nameField: '#advName',
   idle: 'Drop the map .zip here, or click to choose',
-  onDone: d => { state.uploadedWorld = d; },
+  // Your own map replaces a picked CurseForge one.
+  onDone: d => { state.uploadedWorld = d; if (d) clearWorldPick(); },
 });
 
 /* ---------- pick-your-own-mods ---------- */
@@ -950,14 +1303,32 @@ function updateSummary() {
 
   let ok = false, text = '';
   if (tab === 'modpack') {
-    if (state.pick) {
+    const p = state.pick;
+    if (p?.cf) {
+      const f = currentCfFile();
+      const blocked = !p.auto || (f && !f.auto);
+      ok = !blocked;
+      text = `<b>${esc(p.title)}</b> · CurseForge${f ? ' · ' + esc(f.name) + ' · MC ' + esc(f.mc || '?') : ''}`
+        + (blocked ? ' &nbsp;·&nbsp; <b style="color:var(--amber)">needs a manual download</b>' : '');
+    } else if (p) {
       const v = currentPickVersion();
       const sel = $('#mrVersion');
-      text = state.pick.ftb
-        ? `<b>${esc(state.pick.title)}</b> · FTB${sel ? ' · ' + esc(sel.selectedOptions[0].textContent.trim()) : ''}`
-        : `<b>${esc(state.pick.title)}</b>${v ? ' · ' + esc(v.version_number) + ' · MC ' + esc(v.game_versions[0] || '?') : ''}`;
+      text = p.ftb
+        ? `<b>${esc(p.title)}</b> · FTB${sel ? ' · ' + esc(sel.selectedOptions[0].textContent.trim()) : ''}`
+        : `<b>${esc(p.title)}</b>${v ? ' · ' + esc(v.version_number) + ' · MC ' + esc(v.game_versions[0] || '?') : ''}`;
       ok = true;
     } else text = 'Pick a modpack to begin';
+  } else if (tab === 'adventure' && state.cfWorld) {
+    const w = state.cfWorld;
+    const f = currentCwFile();
+    const name = $('#advName').value.trim();
+    if (!w.auto || (f && !f.auto)) {
+      text = `<b>${esc(w.title)}</b> &nbsp;·&nbsp; <b style="color:var(--amber)">needs a manual download</b>`;
+    } else {
+      ok = !!name;
+      text = ok ? `<b>${esc(name)}</b> · CurseForge world · ${esc($('#advType').value)} ${esc($('#advVersion').value)}`
+                : 'Give the server a name';
+    }
   } else if (tab === 'mods') {
     const n = state.basket.size;
     ok = !!($('#modsName').value.trim() && n);
@@ -1033,7 +1404,19 @@ function sharedSpec() {
 $('#btnCreate').onclick = async () => {
   const tab = effectiveTab();
   const spec = sharedSpec();
-  if (tab === 'modpack' && state.pick?.ftb) {
+  if (tab === 'modpack' && state.pick?.cf) {
+    // The server re-reads the file from CurseForge and takes the Minecraft
+    // version from it, so a stale page can never pick the wrong Java.
+    const f = currentCfFile();
+    Object.assign(spec, {
+      kind: 'curseforge',
+      name: state.pick.title,
+      cf_mod_id: state.pick.cf,
+      cf_file_id: f ? f.id : null,
+      icon: state.pick.icon || null,
+    });
+    if (f?.mc) spec.mc_version = f.mc;
+  } else if (tab === 'modpack' && state.pick?.ftb) {
     Object.assign(spec, {
       kind: 'ftb',
       name: state.pick.title,
@@ -1060,6 +1443,17 @@ $('#btnCreate').onclick = async () => {
       mc_version: $('#modsVersion').value,
       mods: [...state.basket.keys()],
       source_label: `${state.basket.size} hand-picked mods`,
+    });
+  } else if (tab === 'adventure' && state.cfWorld) {
+    // Resolved to a download link on the server, where the API key lives.
+    const f = currentCwFile();
+    Object.assign(spec, {
+      kind: $('#advType').value,
+      name: $('#advName').value.trim(),
+      cf_world_id: state.cfWorld.id,
+      cf_world_file_id: f ? f.id : null,
+      mc_version: $('#advVersion').value,
+      icon: state.cfWorld.icon || null,
     });
   } else if (tab === 'adventure') {
     Object.assign(spec, {
@@ -1248,6 +1642,18 @@ async function renderConfig(id) {
         Multiplayer list</b>, so there is nothing to type.</p>
       <a class="btn primary sm" href="/api/servers/${id}/mrpack" download>
         <svg class="ico"><use href="#i-archive"/></svg>Download &amp; play</a>
+    </div>` : ''}
+    ${s.kind === 'curseforge' && sp.cf_mod_id && sp.cf_file_id ? `
+    <div class="field">
+      <label>Play this world</label>
+      <p class="hint" style="margin:0 0 9px">This world runs <b>${esc(sp.cf_file_name || 'a CurseForge pack')}</b>.
+        Download the pack and import it in the <b>CurseForge app</b> (Create Custom Profile →
+        Import) or Prism. It installs that exact version <b>and adds this server to your
+        Multiplayer list</b>, so there is nothing to type. The first download pulls the pack
+        from CurseForge, so give it a minute.</p>
+      <a class="btn primary sm" href="/api/servers/${id}/cfpack" download>
+        <svg class="ico"><use href="#i-archive"/></svg>Download &amp; play</a>
+      ${sp.cf_url ? `<a class="btn sm ghost" href="${esc(sp.cf_url)}/files/${esc(sp.cf_file_id)}" target="_blank" rel="noopener">Open on CurseForge ↗</a>` : ''}
     </div>` : ''}
     ${dom ? `
     <div class="field">
@@ -1511,7 +1917,7 @@ $('#btnConnectHelp').onclick = () => {
         <label>On your home network</label><div class="addr"><span class="a">${esc(s.connect.lan)}</span><button data-join-copy="${esc(s.connect.lan)}">Copy LAN</button></div>
         ${s.connect.public ? `<label>Server hostname / public address</label><div class="addr"><span class="a">${esc(s.connect.public)}</span><button data-join-copy="${esc(s.connect.public)}">Copy address</button></div>` : ''}
       </section>`).join('') || '<p class="hint">Create a world first. Its connection addresses will appear here.</p>'}</div>
-    <p class="panel-note">Playing a modpack? Install the same pack and Minecraft version on your computer. For a custom pack, download the client pack from <b>Manage → Settings</b>.</p>
+    <p class="panel-note">Playing a modpack? CurseForge, Modrinth and hand-built packs have <b>Download &amp; play</b> under <b>Manage → Settings</b> — it installs the exact pack the server runs and puts the server in your Multiplayer list. For other packs, install the same pack and version in your launcher.</p>
     <details class="join-troubleshooting"><summary>Hostname not working at home?</summary><p>Your router may not support connecting to its public address from inside the house. Use the LAN address above, or configure your computer to use a working local DNS resolver.</p><p>The host is <code>${esc(h.lan_host || 'not available')}</code>. Keep your normal router as the default gateway.</p></details>`;
   $$('[data-join-copy]', $('#joinBody')).forEach(btn => btn.onclick = () => copy(btn.dataset.joinCopy, 'Server address'));
   openModal('#joinModal');
@@ -1562,4 +1968,7 @@ setInterval(() => {
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(); });
 
 // Switching source resets paging and re-runs the search.
-$('#mrSource').addEventListener('change', () => { state.mrOffset = 0; state.pick = null; searchModrinth(true); updateSummary(); });
+$('#mrSource').addEventListener('change', () => {
+  state.mrOffset = 0; state.pick = null; clearPick($('#mrPick'));
+  searchModrinth(true); updateSummary();
+});

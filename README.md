@@ -42,14 +42,16 @@ port 25565 for the game itself is fine — players never touch the panel.
 
 ## What it does
 
-- **Modpacks** — search ~18,000 packs on Modrinth or FTB's curated catalogue, click, done.
-- **CurseForge packs, no API key** — download the pack's Server Pack zip and drop it in.
-- **Adventure maps** — drop in a world `.zip` and play it with friends.
+- **Modpacks** — browse CurseForge (with a free API key), ~18,000 packs on Modrinth, or FTB's
+  curated catalogue. Filter by version, loader and category, pick a pack version, click, done.
+- **Any other pack** — download its Server Pack zip and drop it in. This is also the route for
+  CurseForge packs whose author blocks automatic downloads.
+- **Adventure maps** — pick one from CurseForge Worlds, or drop in a world `.zip`.
 - **Build your own pack** — pick individual mods; dependencies are resolved for you.
 - **Plain servers** — Vanilla, Paper, Purpur, Fabric, Forge, NeoForge, Quilt, Spigot.
 - **One address per world**, with no port to remember.
-- **Install-and-play** — download a `.mrpack` that installs the right mods *and* puts the
-  server in your Multiplayer list.
+- **Install-and-play** — download the client pack (`.mrpack` or CurseForge `.zip`) that
+  installs the right mods *and* puts the server in your Multiplayer list.
 - Live console over RCON, player list, start/stop/restart, nightly world snapshots.
 
 ## How the addressing works
@@ -85,6 +87,11 @@ list. Install, open Minecraft, click, play.
 
 Nothing is mirrored: the launcher downloads from Modrinth's CDN, so authors keep their counts.
 
+A CurseForge world gets the same treatment in CurseForge's own format: the author's pack zip
+with the same `servers.dat` added. Import it in the CurseForge app (Create Custom Profile →
+Import) or Prism. A big pack is a few hundred MB, so the panel builds it once, on disk, and
+serves the copy until the pack version or the address changes.
+
 ## Quick start
 
 Requires Docker and Docker Compose on a Linux host.
@@ -113,8 +120,12 @@ All of it lives in `.env`:
 | `RAMCRAFT_PORT_BASE` / `_MAX` | Direct per-world port range (25565 is the router's) |
 | `DOCKER_GID` | gid owning the Docker socket |
 
-A CurseForge API key is optional and set in the panel's Settings, not here. It only buys
-installing packs by URL — the Server Pack upload route needs no key.
+A CurseForge API key is optional and set in the panel's **Settings**, not here — it is stored
+under `/srv/mc` (mode 600) and never sent to the browser; every CurseForge call goes through the
+panel. Without one you still get Modrinth, FTB and the Server Pack upload. Apply for a key at
+[console.curseforge.com](https://console.curseforge.com/); the one to paste starts with
+`$2a$10$`. The panel tests a key before saving it, so a wrong one is refused on the spot
+rather than failing every install later.
 
 ## How it's put together
 
@@ -134,6 +145,8 @@ panel→container on the internal network, never published.
 |---|---|
 | `panel/app.py` | API routes |
 | `panel/servers.py` | Container lifecycle, status, snapshots, ports |
+| `panel/curseforge.py` | CurseForge search, versions, client pack |
+| `panel/settings.py` | Panel settings, including the CurseForge key |
 | `panel/mrpack.py` | Builds the client pack |
 | `panel/nbt.py` | Writes `servers.dat` |
 | `panel/rcon.py` | Minimal async RCON client |
@@ -158,6 +171,12 @@ Hard-won, and easy to get wrong:
   be passed in explicitly.
 - **Docker log chunks can be a single byte** with a TTY. Emitting each chunk as its own SSE
   event makes the console render one line per character; buffer until a newline.
+- **Some CurseForge authors block third-party downloads.** The API then returns no download
+  URL for the pack or its files, and an automatic install would die halfway through. Those
+  packs are tagged *manual download* and routed to the Server Pack upload instead.
+- **A CurseForge key is never stored with a world.** It is read from Settings every time a
+  container is built, so a rebuild (memory change, a wake after the container was removed)
+  cannot fail on a missing key, and a new key applies everywhere at the next rebuild.
 - **Map sites serve pages, not files.** Pasting a Planet Minecraft link downloads HTML and the
   server dies on "Unsupported archive type: text/html". Download it and upload the zip.
 - **Behind a CDN, versionless CSS/JS will be served stale against fresh HTML** — which looks
