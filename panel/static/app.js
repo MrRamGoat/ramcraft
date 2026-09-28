@@ -26,11 +26,21 @@ async function api(path, opts = {}) {
     ...opts,
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
+  signedOutGuard(res);
   const text = await res.text();
   let data;
   try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
   if (!res.ok) throw new Error(data.detail || data.raw || res.statusText);
   return data;
+}
+
+// A session can end under an open tab (expired, or the password was changed
+// elsewhere). Go to the sign-in page rather than failing every poll.
+function signedOutGuard(res) {
+  if (res.status === 401) {
+    location.replace('/login');
+    throw new Error('Signed out');
+  }
 }
 
 function toast(title, msg = '', kind = '') {
@@ -792,6 +802,7 @@ function wireDrop({ drop, input, label, idle, nameField, onDone }) {
     try {
       // Not the api() helper: this is multipart, not JSON.
       const res = await fetch('/api/uploads', { method: 'POST', body });
+      signedOutGuard(res);
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'upload failed');
       onDone(data);
@@ -1417,6 +1428,8 @@ $('#btnSettings').onclick = async () => {
       ? keys.sort().map(k => `<div class="route"><span>${esc(k)}</span><small>${esc(typeof routes[k] === 'string' ? routes[k] : routes[k]?.backend || 'Route available')}</small></div>`).join('')
       : '<p class="hint">No routes yet — start a server and it appears here automatically.</p>';
 
+  api('/me').then(m => { $('#setUser').textContent = m.user; }).catch(() => {});
+
   $('#setStorage').textContent = 'Checking…';
   api('/maintenance').then(m => {
     const n = m.orphans.dirs.length + m.orphans.backups.length;
@@ -1443,6 +1456,30 @@ $('#btnCleanup').onclick = async () => {
     btn.disabled = false;
     btn.textContent = 'Clean up leftovers';
   }
+};
+
+$('#btnChangePw').onclick = async () => {
+  const current = $('#pwCurrent').value;
+  const next = $('#pwNew').value;
+  if (!current || !next) return toast('Fill in both passwords', '', 'warn');
+  if (next.length < 10) return toast('Too short', 'Use at least 10 characters.', 'warn');
+  if (next !== $('#pwAgain').value) return toast('The new passwords differ', 'Type the same one twice.', 'warn');
+  const btn = $('#btnChangePw');
+  btn.disabled = true;
+  try {
+    await api('/account/password', { method: 'PUT', body: { current, new: next } });
+    ['#pwCurrent', '#pwNew', '#pwAgain'].forEach(s => { $(s).value = ''; });
+    toast('Password changed', 'Every other device is now signed out.');
+  } catch (e) {
+    toast('Password not changed', e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+$('#btnSignOut').onclick = async () => {
+  await fetch('/api/logout', { method: 'POST' }).catch(() => {});
+  location.replace('/login');
 };
 
 $('#btnSaveSettings').onclick = async () => {

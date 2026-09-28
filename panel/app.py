@@ -1,24 +1,33 @@
 """RamCraft - one-click Minecraft server hosting panel."""
 import asyncio
 import hashlib
+import hmac
 import json
+import logging
 import os
 import re
 import shutil
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
-from fastapi import FastAPI, HTTPException, Body, UploadFile, File
-from fastapi.responses import StreamingResponse, FileResponse, PlainTextResponse, Response, HTMLResponse
+from fastapi import FastAPI, HTTPException, Body, UploadFile, File, Request
+from fastapi.responses import (StreamingResponse, FileResponse, PlainTextResponse, Response,
+                               HTMLResponse, JSONResponse, RedirectResponse)
 from fastapi.staticfiles import StaticFiles
 
+import auth
 import mrpack
 import rcon
 import servers as S
 
-app = FastAPI(title="RamCraft", docs_url="/api/docs", redoc_url=None)
+# The API schema sits under /api/ so the sign-in covers it like everything else.
+app = FastAPI(title="RamCraft", docs_url="/api/docs", redoc_url=None,
+              openapi_url="/api/openapi.json")
 STATIC = Path(__file__).parent / "static"
+# uvicorn's own logger is the one already wired to stdout (docker logs).
+log = logging.getLogger("uvicorn.error")
 SETTINGS_FILE = S.DATA_ROOT / "_ramcraft-settings.json"
 
 MODRINTH_API = "https://api.modrinth.com/v2"
@@ -26,6 +35,138 @@ MOJANG_MANIFEST = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.j
 UA = {"User-Agent": "RamCraft/1.0 (self-hosted panel)"}
 
 _version_cache = {"at": 0.0, "data": None}
+
+
+# --- sign-in ---------------------------------------------------------------
+
+# Everything else - pages, assets, every API route - needs a session.
+PUBLIC_PATHS = {"/login", "/api/login", "/api/logout", "/api/health", "/favicon.svg"}
+
+
+@app.on_event("startup")
+def _auth_setup():
+    auth.ensure_initialised()
+
+
+def client_ip(request: Request) -> str:
+    # Through the Cloudflare tunnel every request arrives from cloudflared, so
+    # the real visitor is only in this header.
+    return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "?")
+
+
+def _same_origin(request: Request) -> bool:
+    """A cookie rides along on requests other sites trigger too. Refusing any
+    state change whose Origin is not this panel closes that door."""
+    origin = request.headers.get("origin") or request.headers.get("referer")
+    return bool(origin) and urlsplit(origin).netloc == request.headers.get("host", "")
+
+
+def _is_https(request: Request) -> bool:
+    return request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https"
+
+
+def _set_session_cookie(response: Response, request: Request, data: dict):
+    response.set_cookie(
+        auth.COOKIE, auth.make_session(data),
+        max_age=auth.SESSION_DAYS * 86400, httponly=True, samesite="lax",
+        secure=_is_https(request), path="/",
+    )
+
+
+@app.middleware("http")
+async def require_login(request: Request, call_next):
+    path = request.url.path
+    if path in PUBLIC_PATHS:
+        return await call_next(request)
+
+    by_token = auth.check_token(request.headers.get("authorization"))
+    user = None if by_token else auth.check_session(request.cookies.get(auth.COOKIE))
+    if not (by_token or user):
+        if path.startswith("/api/"):
+            return JSONResponse({"detail": "Sign in first."}, status_code=401)
+        return RedirectResponse("/login", status_code=303)
+
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return await call_next(request)
+    if user and not _same_origin(request):
+        return JSONResponse({"detail": "Refused a cross-site request."}, status_code=403)
+    response = await call_next(request)
+    # Every change leaves a trace, so "who deleted that world?" has an answer.
+    log.info("%s %s by %s from %s -> %s", request.method, path,
+             user or "api-token", client_ip(request), response.status_code)
+    return response
+
+
+@app.get("/login", include_in_schema=False)
+def login_page(request: Request):
+    if auth.check_session(request.cookies.get(auth.COOKIE)):
+        return RedirectResponse("/", status_code=303)
+    return HTMLResponse((STATIC / "login.html").read_text(encoding="utf-8"),
+                        headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/login")
+async def login(request: Request, body: dict = Body(...)):
+    ip = client_ip(request)
+    if not _same_origin(request):
+        raise HTTPException(403, "Refused a cross-site request.")
+    wait = auth.locked_for(ip)
+    if wait:
+        raise HTTPException(429, f"Too many wrong passwords. Try again in {wait // 60 + 1} minutes.")
+
+    data = auth.load()
+    user = str(body.get("user", "")).strip()
+    password = str(body.get("password", ""))
+    # Always run the (slow) hash check, even for a wrong username, so timing
+    # does not reveal which half was wrong.
+    pw_ok = bool(data) and await asyncio.to_thread(auth.verify_password, password, data["hash"])
+    user_ok = bool(data) and hmac.compare_digest(user.lower(), data["user"].lower())
+    if not (pw_ok and user_ok):
+        auth.record_failure(ip)
+        log.warning("failed sign-in for %r from %s", user[:40], ip)
+        await asyncio.sleep(1)
+        raise HTTPException(401, "Wrong username or password.")
+
+    auth.clear_failures(ip)
+    log.info("signed in: %s from %s", data["user"], ip)
+    response = JSONResponse({"ok": True, "user": data["user"]})
+    _set_session_cookie(response, request, data)
+    return response
+
+
+@app.post("/api/logout")
+def logout():
+    response = JSONResponse({"ok": True})
+    response.delete_cookie(auth.COOKIE, path="/")
+    return response
+
+
+@app.get("/api/me")
+def me(request: Request):
+    return {"user": auth.check_session(request.cookies.get(auth.COOKIE)) or "api-token"}
+
+
+@app.put("/api/account/password")
+async def change_password(request: Request, body: dict = Body(...)):
+    ip = client_ip(request)
+    wait = auth.locked_for(ip)
+    if wait:
+        raise HTTPException(429, f"Too many wrong passwords. Try again in {wait // 60 + 1} minutes.")
+    data = auth.load()
+    current = str(body.get("current", ""))
+    new = str(body.get("new", ""))
+    if not await asyncio.to_thread(auth.verify_password, current, data["hash"]):
+        auth.record_failure(ip)
+        await asyncio.sleep(1)
+        raise HTTPException(400, "Your current password is not right.")
+    if len(new) < auth.MIN_PASSWORD:
+        raise HTTPException(400, f"Use at least {auth.MIN_PASSWORD} characters.")
+    data = await asyncio.to_thread(auth.set_password, data["user"], new)
+    log.info("password changed for %s from %s", data["user"], ip)
+    # Every other session just died with the old hash; keep this one alive.
+    response = JSONResponse({"ok": True})
+    _set_session_cookie(response, request, data)
+    return response
 
 
 # --- settings --------------------------------------------------------------
@@ -810,9 +951,11 @@ async def asset_cache_headers(request, call_next):
     path = request.url.path
     if path.endswith((".css", ".js")):
         # Versioned URLs make these safe to cache hard; without the version
-        # they must revalidate.
+        # they must revalidate. Only a real 200 - caching the sign-in redirect
+        # "forever" would keep bouncing the stylesheet to /login after signing in.
         resp.headers["Cache-Control"] = (
-            "public, max-age=31536000, immutable" if request.url.query.startswith("v=")
+            "public, max-age=31536000, immutable"
+            if request.url.query.startswith("v=") and resp.status_code == 200
             else "no-cache, must-revalidate"
         )
     elif path.startswith("/api/"):

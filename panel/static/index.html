@@ -20,6 +20,7 @@
   <symbol id="i-restart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></symbol>
   <symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></symbol>
   <symbol id="i-map" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M9 3L3 6v15l6-3 6 3 6-3V3l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/></symbol>
@@ -97,6 +98,7 @@
   <nav class="side-nav" aria-label="Workspace tools">
     <button class="nav-item" id="btnConnectHelp"><svg class="ico"><use href="#i-link"/></svg>How to join</button>
     <button class="nav-item" id="btnSettings"><svg class="ico"><use href="#i-sliders"/></svg>Settings</button>
+    <button class="nav-item" id="btnSignOut" aria-label="Sign out"><svg class="ico"><use href="#i-logout"/></svg>Sign out</button>
   </nav>
   <div class="sidebar-bottom">
     <div class="little-world" aria-hidden="true"><svg viewBox="0 0 24 24"><use href="#i-box"/></svg></div>
@@ -487,6 +489,16 @@
       <div class="field">
         <label for="setMem">Default memory for new servers (GB)</label>
         <input id="setMem" type="number" min="1" max="24" value="4">
+      </div>
+      <div class="field">
+        <label>Account</label>
+        <p class="hint" style="margin:0 0 10px">Signed in as <b id="setUser">…</b>. A new password needs 10+ characters and signs out every other device.</p>
+        <div class="field-row">
+          <input id="pwCurrent" type="password" autocomplete="current-password" placeholder="Current password" aria-label="Current password">
+          <input id="pwNew" type="password" autocomplete="new-password" placeholder="New password" aria-label="New password">
+          <input id="pwAgain" type="password" autocomplete="new-password" placeholder="New password again" aria-label="New password again">
+        </div>
+        <button class="btn sm" id="btnChangePw" style="margin-top:10px">Change password</button>
       </div>
     </div>
     <footer class="modal-foot">

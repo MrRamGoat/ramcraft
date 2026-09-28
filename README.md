@@ -13,6 +13,33 @@ RamCraft downloads it, picks the right Java, boots it, and hands you an address.
 
 ---
 
+## Signing in
+
+The panel has one owner account. On the **first start** it creates one and prints it once:
+
+```bash
+docker logs ramcraft | grep -A3 "first start"
+```
+
+Sign in as `admin` with that password, then change it under **Settings → Account**.
+Changing it signs out every other device. Sessions last 30 days, and 8 wrong passwords
+from one address lock that address out for 15 minutes.
+
+Forgot it? Reset it from the host (this also lets you rename the account):
+
+```bash
+docker exec -it ramcraft python auth.py set-password <username>
+```
+
+Scripts use a token instead of a password: `api_token` in `/srv/mc/_ramcraft-auth.json`
+(mode 600), sent as `Authorization: Bearer <token>`.
+
+Whoever signs in can delete any world along with its backups, so if you expose the panel to
+the internet, a second layer (Cloudflare Access, a VPN) is still worth having. Forwarding
+port 25565 for the game itself is fine — players never touch the panel.
+
+---
+
 ## What it does
 
 - **Modpacks** — search ~18,000 packs on Modrinth or FTB's curated catalogue, click, done.
