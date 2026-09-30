@@ -69,6 +69,10 @@ cp .env.example .env    # set your LAN address, domain and docker gid
 docker compose up -d --build
 ```
 
+Compose refuses to start until `.env` sets `RAMCRAFT_LAN_HOST`, `RAMCRAFT_ROUTER_DOMAIN` and
+`DOCKER_GID`. That's deliberate: with placeholder values the stack boots fine but the DNS answers
+the wrong domain, worlds are published under the wrong name, and the router can't see Docker.
+
 Then open `http://<host>:8110`.
 
 `stat -c '%g' /var/run/docker.sock` gives you the `DOCKER_GID` value — mc-router runs as a

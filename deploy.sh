@@ -19,11 +19,19 @@ CT="${RAMCRAFT_CT_ID:-105}"
 DEST="${RAMCRAFT_DEST:-/opt/ramcraft}"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-NAME="$(basename "$HERE")"
-cd "$HERE/.."
 
-# .env is gitignored but must travel with the source - it holds the addresses.
-tar czf /tmp/ramcraft.tar.gz "$NAME"
+# .env is gitignored, so a fresh clone has none. A local one travels with the
+# source; otherwise the one already on the host is kept. Wiping it on redeploy
+# is what silently reverted the stack to placeholder addresses.
+if [ -f "$HERE/.env" ]; then
+  echo "using the local .env"
+else
+  echo "no local .env - keeping the one in $DEST"
+fi
+
+# The directory's contents, not the directory, so the clone's folder name
+# does not have to match $DEST.
+tar czf /tmp/ramcraft.tar.gz -C "$HERE" .
 scp -q /tmp/ramcraft.tar.gz "$HOST:/tmp/ramcraft.tar.gz"
 
 if [ -n "$CT" ]; then
@@ -35,7 +43,13 @@ else
   SRC=/tmp/ramcraft.tar.gz
 fi
 
-run "mkdir -p $(dirname "$DEST") && cd $(dirname "$DEST") && rm -rf $NAME && tar xzf $SRC && chown -R root:root $NAME"
+# Unpack beside the live copy and swap only once .env is in place, so a
+# missing .env aborts here and leaves the running deployment untouched.
+NEW="$DEST.new"
+run "rm -rf $NEW && mkdir -p $NEW && tar xzf $SRC -C $NEW \
+  && if [ ! -f $NEW/.env ] && [ -f $DEST/.env ]; then cp $DEST/.env $NEW/.env; fi \
+  && if [ ! -f $NEW/.env ]; then echo \"no .env here or in $DEST - copy .env.example to .env and fill it in\" >&2; exit 1; fi \
+  && rm -rf $DEST && mv $NEW $DEST && chown -R root:root $DEST"
 run "cd $DEST && docker compose up -d --build"
 
 echo "deployed"

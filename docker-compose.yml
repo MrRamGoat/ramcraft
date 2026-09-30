@@ -1,5 +1,8 @@
-# Deployment values live in .env (copy .env.example). The defaults below are
-# generic on purpose so the repo carries nobody's addresses.
+# Deployment values live in .env (copy .env.example). The ones that differ on
+# every network - LAN address, domain, docker gid - have no default: a
+# placeholder here would boot fine and then quietly answer the wrong domain,
+# publish routes under the wrong name and leave mc-router locked out of the
+# docker socket. Compose refuses to start without them instead.
 services:
   # Minecraft puts the hostname the player dialled inside its handshake, so one
   # listener on 25565 can fan out to every world by name. That is what makes
@@ -20,7 +23,7 @@ services:
     # socket. Joining the docker group beats running the router as root.
     # Find yours with:  stat -c '%g' /var/run/docker.sock
     group_add:
-      - "${DOCKER_GID:-988}"
+      - "${DOCKER_GID:?set DOCKER_GID in .env - see .env.example}"
     environment:
       IN_DOCKER: "true"
       API_BINDING: ":8080"
@@ -47,8 +50,8 @@ services:
       - "53:53/udp"
       - "53:53/tcp"
     environment:
-      RAMCRAFT_ROUTER_DOMAIN: ${RAMCRAFT_ROUTER_DOMAIN:-mc.example.com}
-      RAMCRAFT_LAN_HOST: ${RAMCRAFT_LAN_HOST:-192.168.1.10}
+      RAMCRAFT_ROUTER_DOMAIN: ${RAMCRAFT_ROUTER_DOMAIN?set RAMCRAFT_ROUTER_DOMAIN in .env - see .env.example}
+      RAMCRAFT_LAN_HOST: ${RAMCRAFT_LAN_HOST:?set RAMCRAFT_LAN_HOST in .env - see .env.example}
     networks:
       - ramcraft
 
@@ -67,9 +70,9 @@ services:
     environment:
       RAMCRAFT_DATA: /srv/mc
       RAMCRAFT_NETWORK: ramcraft
-      RAMCRAFT_LAN_HOST: ${RAMCRAFT_LAN_HOST:-192.168.1.10}
-      # Every world is published as <id>.<this> by mc-router.
-      RAMCRAFT_ROUTER_DOMAIN: ${RAMCRAFT_ROUTER_DOMAIN:-mc.example.com}
+      RAMCRAFT_LAN_HOST: ${RAMCRAFT_LAN_HOST:?set RAMCRAFT_LAN_HOST in .env - see .env.example}
+      # Every world is published as <id>.<this> by mc-router. Blank = LAN only.
+      RAMCRAFT_ROUTER_DOMAIN: ${RAMCRAFT_ROUTER_DOMAIN?set RAMCRAFT_ROUTER_DOMAIN in .env - see .env.example}
       RAMCRAFT_ROUTER_API: http://mc-router:8080
       # 25565 belongs to mc-router, so direct LAN ports start above it.
       RAMCRAFT_PORT_BASE: ${RAMCRAFT_PORT_BASE:-25566}
