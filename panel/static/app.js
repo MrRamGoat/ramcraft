@@ -628,7 +628,7 @@ async function openCreate() {
   $('#advOwn').open = false;
   // Clear the form too. These persist in the DOM, so the previous world's
   // MOTD, ops and uploads were silently applied to the next one.
-  ['#optMotd', '#optOps', '#optPort', '#advName', '#advWorld', '#plainName',
+  ['#optOps', '#optPort', '#advName', '#advWorld', '#plainName',
    '#cfName', '#cfUrl', '#cfZipUrl', '#modsName', '#modsQuery', '#mrQuery'
   ].forEach(sel => { const el = $(sel); if (el) el.value = ''; });
   state.uploadedPack = null;
@@ -1396,8 +1396,6 @@ function sharedSpec() {
   if (port) spec.port = Number(port);
   const ops = $('#optOps').value.trim();
   if (ops) spec.ops = ops.split(',').map(s => s.trim()).filter(Boolean).join(',');
-  const motd = $('#optMotd').value.trim();
-  if (motd) spec.motd = motd;
   return spec;
 }
 
@@ -1698,14 +1696,10 @@ async function renderConfig(id) {
     <p class="hint" style="margin:-8px 0 15px">This port is for direct LAN connections.
       Your server hostname already works without a port; 25565 is reserved for the router.</p>
     <div class="field">
-      <label for="cfgMotd">MOTD</label>
-      <input id="cfgMotd" value="${esc(sp.motd || '')}" placeholder="${esc(s.name)}">
-    </div>
-    <div class="field">
       <label for="cfgOps">Operators</label>
-      <input id="cfgOps" value="${esc(sp.ops || '')}" placeholder="comma separated usernames">
+      <input id="cfgOps" value="${esc(sp.ops || '')}" placeholder="comma separated — the owner is always op">
     </div>
-    <p class="panel-note warn">Changing memory, players, difficulty, MOTD or ops rebuilds the
+    <p class="panel-note warn">Changing memory, players, difficulty or ops rebuilds the
       container. The world is kept — the server does restart, so do it when nobody is playing.</p>
     <div class="foot-actions" style="justify-content:flex-end">
       <button class="btn danger" id="cfgDelete">Delete server</button>
@@ -1735,7 +1729,6 @@ async function renderConfig(id) {
           port: Number($('#cfgPort').value),
           max_players: Number($('#cfgPlayers').value) || 10,
           difficulty: $('#cfgDiff').value,
-          motd: $('#cfgMotd').value.trim(),
           ops: $('#cfgOps').value.trim(),
         },
       });

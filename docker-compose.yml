@@ -30,8 +30,9 @@ services:
       # outside is indistinguishable from the whole setup being broken. This
       # starts it on demand instead, so the link always works.
       AUTO_SCALE_UP: "true"
-      AUTO_SCALE_LOADING_MOTD: "§eStarting up… §7rejoin in a moment"
-      AUTO_SCALE_ASLEEP_MOTD: "§7Asleep — §fjoin to wake it up"
+      # Same brand line the running worlds show, status on the second line.
+      AUTO_SCALE_LOADING_MOTD: "Server Hosted by §lʀᴀᴍᴄʀᴀꜰᴛ.\n§eStarting up… §7rejoin in a moment"
+      AUTO_SCALE_ASLEEP_MOTD: "Server Hosted by §lʀᴀᴍᴄʀᴀꜰᴛ.\n§7Asleep — §fjoin to wake it up"
     networks:
       - ramcraft
 
@@ -75,6 +76,8 @@ services:
       RAMCRAFT_PORT_BASE: ${RAMCRAFT_PORT_BASE:-25566}
       RAMCRAFT_PORT_MAX: ${RAMCRAFT_PORT_MAX:-25640}
       RAMCRAFT_MEM_BUDGET_GB: ${RAMCRAFT_MEM_BUDGET_GB:-16}
+      # Op on every world, comma separated.
+      RAMCRAFT_OWNER_OPS: ${RAMCRAFT_OWNER_OPS:-}
       TZ: ${TZ:-Etc/UTC}
     networks:
       - ramcraft

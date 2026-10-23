@@ -26,6 +26,11 @@ PORT_MAX = int(os.environ.get("RAMCRAFT_PORT_MAX", "25640"))
 LAN_HOST = os.environ.get("RAMCRAFT_LAN_HOST", "127.0.0.1")
 ROUTER_DOMAIN = os.environ.get("RAMCRAFT_ROUTER_DOMAIN", "")
 ROUTER_API = os.environ.get("RAMCRAFT_ROUTER_API", "http://mc-router:8080")
+# Usernames that are op on every world, on top of whatever each world lists.
+OWNER_OPS = [o.strip() for o in os.environ.get("RAMCRAFT_OWNER_OPS", "").split(",") if o.strip()]
+# Every world shows the RamCraft name in the server list - deliberately not per
+# world. Small caps are plain Unicode, so they render on every client version.
+BRAND_MOTD = "Server Hosted by §lʀᴀᴍᴄʀᴀꜰᴛ."
 
 CONTAINER_PREFIX = "mc-"
 WORLD_DIRS = ("world", "world_nether", "world_the_end")
@@ -260,7 +265,7 @@ def build_env(spec: dict, rcon_password: str) -> dict:
         "RCON_PASSWORD": rcon_password,
         "RCON_PORT": "25575",
         "SERVER_NAME": spec["name"],
-        "MOTD": spec.get("motd") or spec["name"],
+        "MOTD": BRAND_MOTD,
         "DIFFICULTY": spec.get("difficulty", "normal"),
         "MAX_PLAYERS": str(spec.get("max_players", 10)),
         "ONLINE_MODE": "true" if spec.get("online_mode", True) else "false",
@@ -275,11 +280,15 @@ def build_env(spec: dict, rcon_password: str) -> dict:
         "OVERRIDE_SERVER_PROPERTIES": "true",
         "STOP_SERVER_ANNOUNCE_DELAY": "10",
         "EXEC_DIRECTLY": "true",
+        # Adventure maps and packs like Liminal Industries generate their
+        # worlds with command blocks; off, they silently do nothing.
+        "ENABLE_COMMAND_BLOCK": "true",
     }
     if spec.get("gamemode"):
         env["MODE"] = spec["gamemode"]
-    if spec.get("ops"):
-        env["OPS"] = spec["ops"]
+    ops = OWNER_OPS + [o.strip() for o in (spec.get("ops") or "").split(",") if o.strip()]
+    if ops:
+        env["OPS"] = ",".join(dict.fromkeys(ops))
     if spec.get("whitelist"):
         env["WHITELIST"] = spec["whitelist"]
         env["ENFORCE_WHITELIST"] = "true"

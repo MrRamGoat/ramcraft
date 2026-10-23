@@ -699,7 +699,7 @@ def update_server(sid: str, body: dict = Body(...)):
             raise HTTPException(400, f"port must be between {S.PORT_BASE} and {S.PORT_MAX}")
         meta["port"] = new_port
         needs_recreate = True
-    for key in ("motd", "difficulty", "max_players", "gamemode", "pvp",
+    for key in ("difficulty", "max_players", "gamemode", "pvp",
                 "view_distance", "simulation_distance", "online_mode", "ops", "whitelist"):
         if key in body:
             meta.setdefault("spec", {})[key] = body[key]

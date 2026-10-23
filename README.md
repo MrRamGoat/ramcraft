@@ -117,6 +117,7 @@ All of it lives in `.env`:
 | `RAMCRAFT_LAN_HOST` | LAN address shown as each world's direct join address |
 | `RAMCRAFT_ROUTER_DOMAIN` | Worlds are published as `<name>.<this>`. Blank = LAN only |
 | `RAMCRAFT_MEM_BUDGET_GB` | RAM this machine may hand out |
+| `RAMCRAFT_OWNER_OPS` | Usernames that are op on every world, comma separated |
 | `RAMCRAFT_PORT_BASE` / `_MAX` | Direct per-world port range (25565 is the router's) |
 | `DOCKER_GID` | gid owning the Docker socket |
 
